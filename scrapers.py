@@ -78,32 +78,32 @@ def scrape_epic7_codes() -> list[tuple[str, str]]:
 
 def scrape_czn_codes() -> list[tuple[str, str]]:
     """
-    Scrape CZN codes from game8.co.
+    Scrape CZN codes from pocketgamer.com.
     Returns list of (code, reward) tuples.
-    Only returns codes from the 'Active Coupons' section.
+    Only returns codes from the 'Active' section.
     """
     soup = _fetch(config.GAMES["czn"]["codes_url"])
     if not soup:
         return []
 
-    table = _find_code_table(soup, section_keyword="active")
-    if not table:
-        print("[Scraper] CZN: Could not find active codes table.")
-        return []
-
     codes = []
-    for row in table.find_all("tr")[1:]:
-        cells = row.find_all("td")
-        if len(cells) < 2:
-            continue
-        raw = cells[0].get_text(separator=" ", strip=True)
-        raw = re.sub(r"(Copied|NEW|---|Duration:.*)", "", raw, flags=re.IGNORECASE)
-        code   = raw.strip()
-        reward = cells[1].get_text(separator=" ", strip=True)[:100]
-        if code:
-            codes.append((code, reward))
 
-    print(f"[Scraper] CZN: Found {len(codes)} codes.")
+    # pocketgamer lists active codes under an "Active" heading as a <ul> list
+    active_heading = soup.find(
+        lambda tag: tag.name in ("h2", "h3", "h4")
+        and "active" in tag.get_text(strip=True).lower()
+    )
+
+    if active_heading:
+        ul = active_heading.find_next("ul")
+        if ul:
+            for li in ul.find_all("li"):
+                code = li.get_text(strip=True)
+                # Skip placeholder entries
+                if code and code.upper() not in ("N/A", "NONE", ""):
+                    codes.append((code, "Check in-game mail for rewards"))
+
+    print(f"[Scraper] CZN: Found {len(codes)} active codes.")
     return codes
 
 

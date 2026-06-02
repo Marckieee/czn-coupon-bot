@@ -21,7 +21,7 @@ GAMES = {
     },
     "czn": {
         "name":       "Chaos Zero Nightmare",
-        "codes_url":  "https://game8.co/games/Chaos-Zero-Nightmare/archives/557967",
+        "codes_url":  "https://www.pocketgamer.com/chaos-zero-nightmare/codes/",
         "redeem_url": "https://page.onstove.com/chaoszeronightmare/en",
     },
 }

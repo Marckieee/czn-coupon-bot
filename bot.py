@@ -37,8 +37,10 @@ def handle_codes(game_key: str) -> str:
     codes = scrapers.get_codes(game_key)
     if not codes:
         return (
-            f"⚠️ Could not fetch codes for {game['name']} right now.\n"
-            f"Check manually: {game['codes_url']}"
+            f"😔 No active codes for {game['name']} right now.\n\n"
+            f"Codes are released during events and updates — "
+            f"the bot will alert you as soon as the page updates!\n\n"
+            f"🔗 Check manually: {game['codes_url']}"
         )
 
     lines = [f"🎁 {game['name']} Codes\n"]
