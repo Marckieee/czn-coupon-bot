@@ -47,7 +47,7 @@ def handle_help() -> str:
         "  /czncodes   \u2014 Latest CZN gift codes\n"
         "  /patch      \u2014 Latest Epic Seven balance patch notes\n"
         "  /help       \u2014 Show this menu\n\n"
-        "\U0001f4a1 Tip: Tap the / button at the bottom of the chat to see all commands!"
+        "\U0001f4a1 Tip: Tap the / button at the bottom of the chat!"
     )
 
 
@@ -57,6 +57,7 @@ def handle_codes(game_key: str) -> str:
         return "\u2753 Unknown game."
 
     codes = scrapers.get_codes(game_key)
+
     if not codes:
         return (
             f"\U0001f614 No active codes for {game['name']} right now.\n\n"
@@ -65,11 +66,23 @@ def handle_codes(game_key: str) -> str:
             f"\U0001f517 Check manually: {game['codes_url']}"
         )
 
-    lines = [f"\U0001f381 {game['name']} Codes\n"]
-    for code, reward in codes[:15]:
-        lines.append(f"\u2022 {code}")
-        lines.append(f"  \u21b3 {reward}\n")
+    checked_at = codes[0].get("checked_at", "unknown")
+
+    lines = [
+        f"\U0001f381 {game['name']} Codes\n",
+        f"Found {len(codes)} active code(s):\n",
+    ]
+
+    for entry in codes[:15]:
+        lines.append(f"\u2022 {entry['code']}")
+        lines.append(f"  \u21b3 {entry['reward']}")
+        if entry.get("expiry"):
+            lines.append(f"  \u23f0 Expires: {entry['expiry']}")
+        lines.append("")
+
     lines.append(f"\U0001f517 Redeem here: {game['redeem_url']}")
+    lines.append(f"\n\U0001f550 Last checked: {checked_at}")
+
     if len(codes) > 15:
         lines.append(f"\n+{len(codes) - 15} more \u2192 {game['codes_url']}")
 
@@ -94,7 +107,7 @@ def handle_patch() -> str:
     for a in soup.find_all("a", href=True):
         href = a["href"]
         if "/news/" in href:
-            title = a.get_text(strip=True)
+            title    = a.get_text(strip=True)
             full_url = href if href.startswith("http") else "https://epic7db.com" + href
             if title and len(title) > 5 and full_url not in seen:
                 seen.add(full_url)
@@ -116,7 +129,7 @@ def handle_patch() -> str:
 # ---------------------------
 
 def route_command(text: str) -> str | None:
-    """Parse a command string and return the response, or None if not a command."""
+    """Parse a command string and return the response, or None."""
     cmd = text.strip().lower().split()[0] if text.strip() else ""
 
     if cmd == "/start":
@@ -167,7 +180,6 @@ loop_count = 0
 print("\n[Bot] Running. Press Ctrl+C to stop.\n")
 
 while True:
-    # --- Handle incoming Telegram messages ---
     updates = telegram_client.get_updates(last_update_id)
     for update in updates:
         last_update_id = update["update_id"] + 1
@@ -181,7 +193,7 @@ while True:
 
         lower = text.strip().lower()
 
-        # Send a descriptive scraping status before processing
+        # Send descriptive status before processing
         if lower.startswith("/epic7codes"):
             telegram_client.send(chat_id, "\U0001f50d Scraping Epic Seven codes... please wait.")
         elif lower.startswith("/czncodes"):
@@ -193,13 +205,11 @@ while True:
         if response:
             telegram_client.send(chat_id, response)
         elif text.strip():
-            # Any unrecognised message -> show the command menu
             telegram_client.send(chat_id, handle_help())
 
     loop_count += 1
 
-    # --- Background: Page hash check every 15 minutes ---
-    # Loop runs every 5 seconds so 180 x 5s = 15 minutes
+    # Background checks every 15 minutes (180 x 5s loops)
     if loop_count % 180 == 0:
         print("[Monitor] Checking codes pages for updates...")
         monitor.check_pages()

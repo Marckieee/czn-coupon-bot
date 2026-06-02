@@ -1,16 +1,21 @@
 """
 monitor.py
-Background monitoring — runs on a timer inside the main loop.
-Hash-checks fan site pages for any content change and alerts admin.
+Background monitoring - runs on a timer inside the main loop.
+
+  - Hash-checks fan site pages for content changes
+  - Alerts admin with actual codes when codes page updates
+  - Alerts admin when a balance adjustment patch is detected
 """
 
 import hashlib
 import requests
+from bs4 import BeautifulSoup
 
 import config
+import scrapers
 import telegram_client
 
-# Tracks MD5 hashes of codes pages to detect updates
+# Tracks MD5 hashes of pages to detect updates
 _page_hashes: dict[str, str] = {}
 
 # Keywords that indicate a balance adjustment patch
@@ -20,10 +25,42 @@ BALANCE_KEYWORDS = [
 ]
 
 
+def _format_codes_alert(game_key: str, game: dict) -> str:
+    """
+    Scrape and format codes into an alert message including
+    rewards, expiry dates and last-checked timestamp.
+    """
+    codes = scrapers.get_codes(game_key)
+
+    if not codes:
+        return (
+            f"\U0001f4cb {game['name']} page updated but no active codes found.\n\n"
+            f"\U0001f517 {game['codes_url']}"
+        )
+
+    checked_at = codes[0].get("checked_at", "unknown")
+    lines = [
+        f"\U0001f381 New {game['name']} Codes Detected!\n",
+        f"Found {len(codes)} active code(s):\n",
+    ]
+
+    for entry in codes[:15]:
+        lines.append(f"\u2022 {entry['code']}")
+        lines.append(f"  \u21b3 {entry['reward']}")
+        if entry.get("expiry"):
+            lines.append(f"  \u23f0 Expires: {entry['expiry']}")
+        lines.append("")
+
+    lines.append(f"\U0001f517 Redeem: {game['redeem_url']}")
+    lines.append(f"\n\U0001f550 Last checked: {checked_at}")
+
+    return "\n".join(lines)
+
+
 def check_pages() -> None:
     """
     Hash-check each codes page.
-    Alert admin if the page content has changed since last check.
+    Alert admin with actual codes if the page content has changed.
     """
     for game_key, game in config.GAMES.items():
         url = game["codes_url"]
@@ -36,11 +73,9 @@ def check_pages() -> None:
             continue
 
         if url in _page_hashes and _page_hashes[url] != current_hash:
-            telegram_client.send_admin(
-                f"📋 {game['name']} codes page updated!\n\n"
-                f"Run /codes {game_key} to see the latest codes.\n"
-                f"🔗 {url}"
-            )
+            print(f"[Monitor] {game['name']} codes page changed - scraping codes...")
+            alert = _format_codes_alert(game_key, game)
+            telegram_client.send_admin(alert)
 
         _page_hashes[url] = current_hash
 
@@ -62,42 +97,32 @@ def check_epic7_patches() -> None:
         print(f"[Monitor] Could not fetch patch notes: {e}")
         return
 
-    from bs4 import BeautifulSoup
     soup = BeautifulSoup(r.text, "html.parser")
 
-    # Each post is an <a> tag linking to /news/...
+    # Collect post links
     posts = []
+    seen_urls = set()
     for a in soup.find_all("a", href=True):
         href = a["href"]
         if "/news/" in href and href != patch_url:
-            title = a.get_text(strip=True)
+            title    = a.get_text(strip=True)
             full_url = href if href.startswith("http") else "https://epic7db.com" + href
-            if title and len(title) > 5:
+            if title and len(title) > 5 and full_url not in seen_urls:
+                seen_urls.add(full_url)
                 posts.append((title, full_url))
 
-    # Deduplicate
-    seen_urls = set()
-    unique_posts = []
-    for title, url in posts:
-        if url not in seen_urls:
-            seen_urls.add(url)
-            unique_posts.append((title, url))
-
-    # Check for new balance-related posts
     current_hash = hashlib.md5(r.text.encode()).hexdigest()
-    patch_key = "epic7_patches"
+    patch_key    = "epic7_patches"
 
     if patch_key in _page_hashes and _page_hashes[patch_key] != current_hash:
-        # Page changed — check if any post titles mention balance adjustments
-        for title, url in unique_posts[:5]:
-            title_lower = title.lower()
-            if any(kw in title_lower for kw in BALANCE_KEYWORDS):
+        for title, url in posts[:5]:
+            if any(kw in title.lower() for kw in BALANCE_KEYWORDS):
                 telegram_client.send_admin(
-                    f"⚖️ Epic Seven Balance Adjustment Detected!\n\n"
-                    f"📌 {title}\n"
-                    f"🔗 {url}\n\n"
+                    f"\u2696\ufe0f Epic Seven Balance Adjustment Detected!\n\n"
+                    f"\U0001f4cc {title}\n"
+                    f"\U0001f517 {url}\n\n"
                     f"Check the full patch notes at:\n{patch_url}"
                 )
-                break  # Only alert once per check
+                break
 
     _page_hashes[patch_key] = current_hash
