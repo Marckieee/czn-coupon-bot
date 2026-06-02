@@ -92,7 +92,11 @@ def handle_patch() -> str:
     return "\n".join(lines)
 
 
+# ---------------------------
+# COMMAND ROUTER
+# ---------------------------
 
+def route_command(text: str) -> str | None:
     """Parse a command string and return the response, or None if not a command."""
     parts = text.strip().lower().split()
     if not parts:
@@ -122,12 +126,21 @@ print("  Game Monitor Bot starting up")
 print("=" * 40)
 
 config.validate()
+
+# Flush any pending updates so we don't reprocess old messages on restart
+print("[Bot] Flushing pending Telegram updates...")
+_pending = telegram_client.get_updates(offset=-1)
+if _pending:
+    last_update_id = _pending[-1]["update_id"] + 1
+    print(f"[Bot] Skipped {len(_pending)} old update(s).")
+else:
+    last_update_id = None
+
 telegram_client.send_admin("🤖 Game Monitor Bot started!\n\nSend /help to see commands.")
 
 # ---------------------------
 # MAIN LOOP
 # ---------------------------
-last_update_id: int | None = None
 loop_count = 0
 
 print("\n[Bot] Running. Press Ctrl+C to stop.\n")
