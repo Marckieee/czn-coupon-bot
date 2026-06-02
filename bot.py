@@ -21,37 +21,37 @@ import monitor
 
 def handle_help() -> str:
     return (
-        "🎮 Game Monitor Bot\n\n"
+        "\U0001f3ae Game Monitor Bot\n\n"
         "Available commands:\n\n"
-        "  /epic7codes — Latest Epic Seven gift codes\n"
-        "  /czncodes   — Latest CZN gift codes\n"
-        "  /patch      — Latest Epic Seven balance patch notes\n"
-        "  /help       — Show this menu\n\n"
-        "💡 Tip: Tap the / button at the bottom of the chat to see all commands!"
+        "  /epic7codes \u2014 Latest Epic Seven gift codes\n"
+        "  /czncodes   \u2014 Latest CZN gift codes\n"
+        "  /patch      \u2014 Latest Epic Seven balance patch notes\n"
+        "  /help       \u2014 Show this menu\n\n"
+        "\U0001f4a1 Tip: Tap the / button at the bottom of the chat to see all commands!"
     )
 
 
 def handle_codes(game_key: str) -> str:
     game = config.GAMES.get(game_key)
     if not game:
-        return "❓ Unknown game."
+        return "\u2753 Unknown game."
 
     codes = scrapers.get_codes(game_key)
     if not codes:
         return (
-            f"😔 No active codes for {game['name']} right now.\n\n"
-            f"Codes are released during events and updates — "
+            f"\U0001f614 No active codes for {game['name']} right now.\n\n"
+            f"Codes are released during events and updates \u2014 "
             f"the bot will alert you as soon as new ones appear!\n\n"
-            f"🔗 Check manually: {game['codes_url']}"
+            f"\U0001f517 Check manually: {game['codes_url']}"
         )
 
-    lines = [f"🎁 {game['name']} Codes\n"]
+    lines = [f"\U0001f381 {game['name']} Codes\n"]
     for code, reward in codes[:15]:
-        lines.append(f"• {code}")
-        lines.append(f"  ↳ {reward}\n")
-    lines.append(f"🔗 Redeem here: {game['redeem_url']}")
+        lines.append(f"\u2022 {code}")
+        lines.append(f"  \u21b3 {reward}\n")
+    lines.append(f"\U0001f517 Redeem here: {game['redeem_url']}")
     if len(codes) > 15:
-        lines.append(f"\n+{len(codes) - 15} more → {game['codes_url']}")
+        lines.append(f"\n+{len(codes) - 15} more \u2192 {game['codes_url']}")
 
     return "\n".join(lines)
 
@@ -64,7 +64,7 @@ def handle_patch() -> str:
         r = requests.get(patch_url, headers=config.SCRAPE_HEADERS, timeout=15)
         r.raise_for_status()
     except Exception:
-        return f"⚠️ Could not fetch patch notes.\nCheck manually: {patch_url}"
+        return f"\u26a0\ufe0f Could not fetch patch notes.\nCheck manually: {patch_url}"
 
     from bs4 import BeautifulSoup
     soup = BeautifulSoup(r.text, "html.parser")
@@ -81,11 +81,11 @@ def handle_patch() -> str:
                 posts.append((title, full_url))
 
     if not posts:
-        return f"⚠️ No patch notes found.\nCheck manually: {patch_url}"
+        return f"\u26a0\ufe0f No patch notes found.\nCheck manually: {patch_url}"
 
-    lines = ["⚖️ Latest Epic Seven Patch Notes\n"]
+    lines = ["\u2696\ufe0f Latest Epic Seven Patch Notes\n"]
     for title, url in posts[:8]:
-        lines.append(f"• {title}")
+        lines.append(f"\u2022 {title}")
         lines.append(f"  {url}\n")
 
     return "\n".join(lines)
@@ -132,7 +132,9 @@ if _pending:
 else:
     last_update_id = None
 
-telegram_client.send_admin("🤖 Game Monitor Bot started!\n\nSend /help to see commands.")
+telegram_client.send_admin(
+    "\U0001f916 Game Monitor Bot started!\n\nSend /help to see commands."
+)
 
 # ---------------------------
 # MAIN LOOP
@@ -155,14 +157,20 @@ while True:
         print(f"[Telegram] {chat_id}: {text!r}")
 
         lower = text.strip().lower()
-        if any(lower.startswith(c) for c in ("/epic7codes", "/czncodes", "/patch", "/start", "/help")):
-            telegram_client.send(chat_id, "🔍 Fetching... please wait.")
+
+        # Send a descriptive scraping status before processing
+        if lower.startswith("/epic7codes"):
+            telegram_client.send(chat_id, "\U0001f50d Scraping Epic Seven codes... please wait.")
+        elif lower.startswith("/czncodes"):
+            telegram_client.send(chat_id, "\U0001f50d Scraping CZN codes... please wait.")
+        elif lower.startswith("/patch"):
+            telegram_client.send(chat_id, "\U0001f50d Fetching latest Epic Seven patch notes... please wait.")
 
         response = route_command(text)
         if response:
             telegram_client.send(chat_id, response)
         elif text.strip():
-            # Any unrecognised message → show the command menu
+            # Any unrecognised message -> show the command menu
             telegram_client.send(chat_id, handle_help())
 
     loop_count += 1
