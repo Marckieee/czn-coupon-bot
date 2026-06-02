@@ -23,31 +23,45 @@ def handle_welcome() -> str:
     """Shown when a user sends /start for the first time."""
     return (
         "\U0001f44b Welcome to the E7 & CZN Game Monitor Bot!\n\n"
-        "I track gift codes and patch notes for:\n"
-        "  \U0001f3ae Epic Seven\n"
-        "  \U0001f3ae Chaos Zero Nightmare\n\n"
-        "I will automatically alert you when:\n"
-        "  \U0001f381 New gift codes drop\n"
-        "  \u2696\ufe0f  A balance patch is released\n\n"
-        "Here is what you can do:\n\n"
-        "  /epic7codes \u2014 Latest Epic Seven gift codes\n"
-        "  /czncodes   \u2014 Latest CZN gift codes\n"
-        "  /patch      \u2014 Latest Epic Seven balance patch notes\n"
-        "  /help       \u2014 Show all commands\n\n"
-        "\U0001f4a1 Tap the / button below to get started!"
+
+        "\U0001f916 What this bot does automatically:\n"
+        "  \u2022 Checks for new gift codes every 15 minutes\n"
+        "  \u2022 Alerts you instantly when new codes drop\n"
+        "  \u2022 Monitors Epic Seven balance patch notes\n"
+        "  \u2022 Alerts you when a balance adjustment is detected\n\n"
+
+        "\U0001f3ae Games tracked:\n"
+        "  \u2022 Epic Seven\n"
+        "  \u2022 Chaos Zero Nightmare\n\n"
+
+        "\U0001f4ac Available commands:\n\n"
+        "  /epic7codes \u2014 Get latest Epic Seven gift codes\n"
+        "  /czncodes   \u2014 Get latest CZN gift codes\n"
+        "  /patch      \u2014 Get latest Epic Seven balance patch notes\n"
+        "  /help       \u2014 Show this menu again\n\n"
+
+        "\U0001f4a1 Tip: Tap the / button at the bottom of the chat to see all commands!"
     )
 
 
 def handle_help() -> str:
     """Shown when a user sends /help."""
     return (
-        "\U0001f3ae Game Monitor Bot\n\n"
-        "Available commands:\n\n"
-        "  /epic7codes \u2014 Latest Epic Seven gift codes\n"
-        "  /czncodes   \u2014 Latest CZN gift codes\n"
-        "  /patch      \u2014 Latest Epic Seven balance patch notes\n"
-        "  /help       \u2014 Show this menu\n\n"
-        "\U0001f4a1 Tip: Tap the / button at the bottom of the chat!"
+        "\U0001f3ae E7 & CZN Game Monitor Bot\n\n"
+
+        "\U0001f916 What I do automatically:\n"
+        "  \u2022 Check for new gift codes every 15 minutes\n"
+        "  \u2022 Alert you instantly when new codes drop\n"
+        "  \u2022 Monitor Epic Seven for balance patch notes\n"
+        "  \u2022 Alert you when a balance adjustment is detected\n\n"
+
+        "\U0001f4ac Available commands:\n\n"
+        "  /epic7codes \u2014 Get latest Epic Seven gift codes\n"
+        "  /czncodes   \u2014 Get latest CZN gift codes\n"
+        "  /patch      \u2014 Get latest Epic Seven balance patch notes\n"
+        "  /help       \u2014 Show this menu again\n\n"
+
+        "\U0001f4a1 Tip: Tap the / button at the bottom of the chat to see all commands!"
     )
 
 
