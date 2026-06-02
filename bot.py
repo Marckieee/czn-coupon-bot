@@ -22,27 +22,26 @@ import monitor
 def handle_help() -> str:
     return (
         "🎮 Game Monitor Bot\n\n"
-        "Commands:\n"
-        "  /codes epic7  — Latest Epic Seven gift codes\n"
-        "  /codes czn    — Latest CZN gift codes\n"
-        "  /patch        — Latest Epic Seven patch notes\n\n"
-        "Auto-alerts:\n"
-        "  • Notified when codes pages update\n"
-        "  • Notified when a balance adjustment patch drops"
+        "Available commands:\n\n"
+        "  /epic7codes — Latest Epic Seven gift codes\n"
+        "  /czncodes   — Latest CZN gift codes\n"
+        "  /patch      — Latest Epic Seven balance patch notes\n"
+        "  /help       — Show this menu\n\n"
+        "💡 Tip: Tap the / button at the bottom of the chat to see all commands!"
     )
 
 
 def handle_codes(game_key: str) -> str:
     game = config.GAMES.get(game_key)
     if not game:
-        return "Unknown game. Use /codes epic7 or /codes czn"
+        return "❓ Unknown game."
 
     codes = scrapers.get_codes(game_key)
     if not codes:
         return (
             f"😔 No active codes for {game['name']} right now.\n\n"
             f"Codes are released during events and updates — "
-            f"the bot will alert you as soon as the page updates!\n\n"
+            f"the bot will alert you as soon as new ones appear!\n\n"
             f"🔗 Check manually: {game['codes_url']}"
         )
 
@@ -50,7 +49,7 @@ def handle_codes(game_key: str) -> str:
     for code, reward in codes[:15]:
         lines.append(f"• {code}")
         lines.append(f"  ↳ {reward}\n")
-    lines.append(f"🔗 Redeem: {game['redeem_url']}")
+    lines.append(f"🔗 Redeem here: {game['redeem_url']}")
     if len(codes) > 15:
         lines.append(f"\n+{len(codes) - 15} more → {game['codes_url']}")
 
@@ -98,22 +97,19 @@ def handle_patch() -> str:
 
 def route_command(text: str) -> str | None:
     """Parse a command string and return the response, or None if not a command."""
-    parts = text.strip().lower().split()
-    if not parts:
-        return None
-
-    cmd = parts[0]
+    cmd = text.strip().lower().split()[0] if text.strip() else ""
 
     if cmd in ("/start", "/help"):
         return handle_help()
 
+    if cmd == "/epic7codes":
+        return handle_codes("epic7")
+
+    if cmd == "/czncodes":
+        return handle_codes("czn")
+
     if cmd == "/patch":
         return handle_patch()
-
-    if cmd == "/codes":
-        if len(parts) < 2:
-            return "Usage: /codes epic7  or  /codes czn"
-        return handle_codes(parts[1])
 
     return None
 
@@ -127,7 +123,7 @@ print("=" * 40)
 
 config.validate()
 
-# Flush any pending updates so we don't reprocess old messages on restart
+# Flush pending updates so we don't reprocess old messages on restart
 print("[Bot] Flushing pending Telegram updates...")
 _pending = telegram_client.get_updates(offset=-1)
 if _pending:
@@ -159,12 +155,15 @@ while True:
         print(f"[Telegram] {chat_id}: {text!r}")
 
         lower = text.strip().lower()
-        if any(lower.startswith(c) for c in ("/codes", "/start", "/help", "/patch")):
+        if any(lower.startswith(c) for c in ("/epic7codes", "/czncodes", "/patch", "/start", "/help")):
             telegram_client.send(chat_id, "🔍 Fetching... please wait.")
 
         response = route_command(text)
         if response:
             telegram_client.send(chat_id, response)
+        elif text.strip():
+            # Any unrecognised message → show the command menu
+            telegram_client.send(chat_id, handle_help())
 
     loop_count += 1
 
