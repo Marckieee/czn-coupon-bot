@@ -176,11 +176,11 @@ while True:
     loop_count += 1
 
     # --- Background: Page hash check every 15 minutes ---
-    if loop_count % config.SCRAPE_CHECK_INTERVAL == 0:
+    if loop_count % 180 == 0:  # 180 x 5s = 15 minutes
         print("[Monitor] Checking codes pages for updates...")
         monitor.check_pages()
         print("[Monitor] Checking Epic Seven patch notes...")
         monitor.check_epic7_patches()
         loop_count = 0
 
-    time.sleep(60)
+    time.sleep(5)
