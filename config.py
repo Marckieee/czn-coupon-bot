@@ -18,6 +18,7 @@ GAMES = {
         "name":       "Epic Seven",
         "codes_url":  "https://ucngame.com/codes/epic-seven-codes/",
         "redeem_url": "https://epic7.onstove.com/en/coupon",
+        "patch_url":  "https://epic7db.com/news/patch-notes",
     },
     "czn": {
         "name":       "Chaos Zero Nightmare",

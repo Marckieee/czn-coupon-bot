@@ -7,6 +7,7 @@ Run with:
     python bot.py
 """
 
+import requests
 import time
 import config
 import telegram_client
@@ -22,10 +23,12 @@ def handle_help() -> str:
     return (
         "🎮 Game Monitor Bot\n\n"
         "Commands:\n"
-        "  /codes epic7 — Latest Epic Seven gift codes\n"
-        "  /codes czn   — Latest CZN gift codes\n\n"
+        "  /codes epic7  — Latest Epic Seven gift codes\n"
+        "  /codes czn    — Latest CZN gift codes\n"
+        "  /patch        — Latest Epic Seven patch notes\n\n"
         "Auto-alerts:\n"
-        "  • You'll be notified when either codes page updates"
+        "  • Notified when codes pages update\n"
+        "  • Notified when a balance adjustment patch drops"
     )
 
 
@@ -54,7 +57,42 @@ def handle_codes(game_key: str) -> str:
     return "\n".join(lines)
 
 
-def route_command(text: str) -> str | None:
+def handle_patch() -> str:
+    """Fetch and display the latest Epic Seven patch notes."""
+    patch_url = config.GAMES["epic7"].get("patch_url")
+
+    try:
+        r = requests.get(patch_url, headers=config.SCRAPE_HEADERS, timeout=15)
+        r.raise_for_status()
+    except Exception:
+        return f"⚠️ Could not fetch patch notes.\nCheck manually: {patch_url}"
+
+    from bs4 import BeautifulSoup
+    soup = BeautifulSoup(r.text, "html.parser")
+
+    posts = []
+    seen = set()
+    for a in soup.find_all("a", href=True):
+        href = a["href"]
+        if "/news/" in href:
+            title = a.get_text(strip=True)
+            full_url = href if href.startswith("http") else "https://epic7db.com" + href
+            if title and len(title) > 5 and full_url not in seen:
+                seen.add(full_url)
+                posts.append((title, full_url))
+
+    if not posts:
+        return f"⚠️ No patch notes found.\nCheck manually: {patch_url}"
+
+    lines = ["⚖️ Latest Epic Seven Patch Notes\n"]
+    for title, url in posts[:8]:
+        lines.append(f"• {title}")
+        lines.append(f"  {url}\n")
+
+    return "\n".join(lines)
+
+
+
     """Parse a command string and return the response, or None if not a command."""
     parts = text.strip().lower().split()
     if not parts:
@@ -64,6 +102,9 @@ def route_command(text: str) -> str | None:
 
     if cmd in ("/start", "/help"):
         return handle_help()
+
+    if cmd == "/patch":
+        return handle_patch()
 
     if cmd == "/codes":
         if len(parts) < 2:
@@ -105,7 +146,7 @@ while True:
         print(f"[Telegram] {chat_id}: {text!r}")
 
         lower = text.strip().lower()
-        if any(lower.startswith(c) for c in ("/codes", "/start", "/help")):
+        if any(lower.startswith(c) for c in ("/codes", "/start", "/help", "/patch")):
             telegram_client.send(chat_id, "🔍 Fetching... please wait.")
 
         response = route_command(text)
@@ -118,6 +159,8 @@ while True:
     if loop_count % config.SCRAPE_CHECK_INTERVAL == 0:
         print("[Monitor] Checking codes pages for updates...")
         monitor.check_pages()
+        print("[Monitor] Checking Epic Seven patch notes...")
+        monitor.check_epic7_patches()
         loop_count = 0
 
     time.sleep(60)
