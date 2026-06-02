@@ -19,7 +19,27 @@ import monitor
 # COMMAND HANDLERS
 # ---------------------------
 
+def handle_welcome() -> str:
+    """Shown when a user sends /start for the first time."""
+    return (
+        "\U0001f44b Welcome to the E7 & CZN Game Monitor Bot!\n\n"
+        "I track gift codes and patch notes for:\n"
+        "  \U0001f3ae Epic Seven\n"
+        "  \U0001f3ae Chaos Zero Nightmare\n\n"
+        "I will automatically alert you when:\n"
+        "  \U0001f381 New gift codes drop\n"
+        "  \u2696\ufe0f  A balance patch is released\n\n"
+        "Here is what you can do:\n\n"
+        "  /epic7codes \u2014 Latest Epic Seven gift codes\n"
+        "  /czncodes   \u2014 Latest CZN gift codes\n"
+        "  /patch      \u2014 Latest Epic Seven balance patch notes\n"
+        "  /help       \u2014 Show all commands\n\n"
+        "\U0001f4a1 Tap the / button below to get started!"
+    )
+
+
 def handle_help() -> str:
+    """Shown when a user sends /help."""
     return (
         "\U0001f3ae Game Monitor Bot\n\n"
         "Available commands:\n\n"
@@ -99,7 +119,10 @@ def route_command(text: str) -> str | None:
     """Parse a command string and return the response, or None if not a command."""
     cmd = text.strip().lower().split()[0] if text.strip() else ""
 
-    if cmd in ("/start", "/help"):
+    if cmd == "/start":
+        return handle_welcome()
+
+    if cmd == "/help":
         return handle_help()
 
     if cmd == "/epic7codes":
@@ -176,7 +199,8 @@ while True:
     loop_count += 1
 
     # --- Background: Page hash check every 15 minutes ---
-    if loop_count % 180 == 0:  # 180 x 5s = 15 minutes
+    # Loop runs every 5 seconds so 180 x 5s = 15 minutes
+    if loop_count % 180 == 0:
         print("[Monitor] Checking codes pages for updates...")
         monitor.check_pages()
         print("[Monitor] Checking Epic Seven patch notes...")
