@@ -8,6 +8,7 @@ Run with:
 """
 
 import requests
+import json
 import time
 from datetime import datetime, timezone, timedelta
 import config
@@ -18,11 +19,36 @@ import database
 
 
 # ---------------------------
+# KEYBOARD LAYOUTS
+# ---------------------------
+
+MAIN_KEYBOARD = {
+    "inline_keyboard": [
+        [
+            {"text": "\U0001f381 Epic7 Codes",  "callback_data": "epic7codes"},
+            {"text": "\U0001f381 CZN Codes",     "callback_data": "czncodes"},
+        ],
+        [
+            {"text": "\u2696\ufe0f Patch Notes", "callback_data": "patch"},
+            {"text": "\U0001f916 Status",         "callback_data": "status"},
+        ],
+        [
+            {"text": "\U0001f514 Subscribe",      "callback_data": "subscribe"},
+            {"text": "\U0001f515 Unsubscribe",    "callback_data": "unsubscribe"},
+        ],
+        [
+            {"text": "\u2139\ufe0f About",        "callback_data": "about"},
+            {"text": "\u2753 Help",               "callback_data": "help"},
+        ],
+    ]
+}
+
+
+# ---------------------------
 # COMMAND HANDLERS
 # ---------------------------
 
 def handle_welcome() -> str:
-    """Shown when a user sends /start for the first time."""
     return (
         "\U0001f44b Welcome to the E7 & CZN Game Monitor Bot!\n\n"
 
@@ -37,21 +63,11 @@ def handle_welcome() -> str:
         "  \u2022 Epic Seven\n"
         "  \u2022 Chaos Zero Nightmare\n\n"
 
-        "\U0001f4ac Available commands:\n\n"
-        "  /subscribe    \u2014 Get automatic alerts for codes & patches\n"
-        "  /unsubscribe  \u2014 Stop receiving automatic alerts\n"
-        "  /epic7codes   \u2014 Get latest Epic Seven gift codes\n"
-        "  /czncodes     \u2014 Get latest CZN gift codes\n"
-        "  /patch        \u2014 Get latest Epic Seven balance patch notes\n"
-        "  /status       \u2014 Check bot monitoring status\n"
-        "  /help         \u2014 Show this menu again\n\n"
-
-        "\U0001f4a1 Tip: Use /subscribe to never miss a code or patch alert!"
+        "\U0001f4a1 Use the buttons below or tap / to see all commands!"
     )
 
 
 def handle_help() -> str:
-    """Shown when a user sends /help."""
     return (
         "\U0001f3ae E7 & CZN Game Monitor Bot\n\n"
 
@@ -63,15 +79,46 @@ def handle_help() -> str:
         "  \u2022 Alert subscribers when a balance adjustment drops\n\n"
 
         "\U0001f4ac Available commands:\n\n"
-        "  /subscribe    \u2014 Get automatic alerts for codes & patches\n"
-        "  /unsubscribe  \u2014 Stop receiving automatic alerts\n"
-        "  /epic7codes   \u2014 Get latest Epic Seven gift codes\n"
-        "  /czncodes     \u2014 Get latest CZN gift codes\n"
-        "  /patch        \u2014 Get latest Epic Seven balance patch notes\n"
-        "  /status       \u2014 Check bot monitoring status\n"
-        "  /help         \u2014 Show this menu again\n\n"
+        "  /subscribe    \u2014 Get automatic alerts\n"
+        "  /unsubscribe  \u2014 Stop automatic alerts\n"
+        "  /epic7codes   \u2014 Latest Epic Seven gift codes\n"
+        "  /czncodes     \u2014 Latest CZN gift codes\n"
+        "  /patch        \u2014 Latest Epic Seven balance patch notes\n"
+        "  /status       \u2014 Bot monitoring status\n"
+        "  /about        \u2014 About this bot\n"
+        "  /help         \u2014 Show this menu\n\n"
 
-        "\U0001f4a1 Tip: Tap the / button at the bottom of the chat to see all commands!"
+        "\U0001f4a1 Tip: Use the buttons below for quick access!"
+    )
+
+
+def handle_about() -> str:
+    return (
+        "\u2139\ufe0f About This Bot\n\n"
+
+        "\U0001f916 E7 & CZN Game Monitor Bot\n"
+        "Version: 1.0.0\n\n"
+
+        "\U0001f4cb What it tracks:\n"
+        "  \u2022 Epic Seven gift codes\n"
+        "  \u2022 Chaos Zero Nightmare gift codes\n"
+        "  \u2022 Epic Seven balance patch notes\n\n"
+
+        "\U0001f517 Data sources:\n"
+        "  \u2022 ucngame.com (Epic Seven codes)\n"
+        "  \u2022 pocketgamer.com (CZN codes)\n"
+        "  \u2022 epic7db.com (Patch notes)\n\n"
+
+        "\u23f1 Update frequency:\n"
+        "  \u2022 Codes checked every 15 minutes\n"
+        "  \u2022 Patch notes checked every 15 minutes\n"
+        "  \u2022 Expiry warnings sent 24hrs before codes expire\n\n"
+
+        "\U0001f4e3 Alerts:\n"
+        "  \u2022 Use /subscribe to receive automatic alerts\n"
+        "  \u2022 Alerts are sent to all subscribers instantly\n\n"
+
+        "Built with \u2764\ufe0f for Epic Seven & CZN players."
     )
 
 
@@ -112,7 +159,6 @@ def handle_unsubscribe(chat_id: int) -> str:
 
 
 def handle_status() -> str:
-    """Show current monitoring status and next check times."""
     states = database.get_all_monitor_states()
     count  = database.get_subscriber_count()
 
@@ -128,7 +174,7 @@ def handle_status() -> str:
         lines.append("No checks run yet \u2014 first check happens in 15 minutes.\n")
     else:
         for state in states:
-            label      = labels.get(state["key"], state["key"])
+            label       = labels.get(state["key"], state["key"])
             status_icon = "\u2705" if state["status"] == "ok" else "\u26a0\ufe0f"
             lines.append(f"{status_icon} {label}")
             lines.append(f"   Last check:  {state['last_check']}")
@@ -156,7 +202,6 @@ def handle_codes(game_key: str) -> str:
         )
 
     checked_at = codes[0].get("checked_at", "unknown")
-
     lines = [
         f"\U0001f381 {game['name']} Codes\n",
         f"Found {len(codes)} active code(s):\n",
@@ -179,7 +224,6 @@ def handle_codes(game_key: str) -> str:
 
 
 def handle_patch() -> str:
-    """Fetch and display the latest Epic Seven patch notes."""
     patch_url = config.GAMES["epic7"].get("patch_url")
 
     try:
@@ -217,35 +261,79 @@ def handle_patch() -> str:
 # COMMAND ROUTER
 # ---------------------------
 
-def route_command(text: str, chat_id: int, username: str | None) -> str | None:
-    """Parse a command string and return the response, or None."""
-    cmd = text.strip().lower().split()[0] if text.strip() else ""
-
-    if cmd == "/start":
+def get_response(cmd: str, chat_id: int, username: str | None) -> str | None:
+    """Map a command string to a response."""
+    if cmd in ("/start", "start"):
         return handle_welcome()
-
-    if cmd == "/help":
+    if cmd in ("/help", "help"):
         return handle_help()
-
-    if cmd == "/subscribe":
+    if cmd in ("/about", "about"):
+        return handle_about()
+    if cmd in ("/subscribe", "subscribe"):
         return handle_subscribe(chat_id, username)
-
-    if cmd == "/unsubscribe":
+    if cmd in ("/unsubscribe", "unsubscribe"):
         return handle_unsubscribe(chat_id)
-
-    if cmd == "/status":
+    if cmd in ("/status", "status"):
         return handle_status()
-
-    if cmd == "/epic7codes":
+    if cmd in ("/epic7codes", "epic7codes"):
         return handle_codes("epic7")
-
-    if cmd == "/czncodes":
+    if cmd in ("/czncodes", "czncodes"):
         return handle_codes("czn")
-
-    if cmd == "/patch":
+    if cmd in ("/patch", "patch"):
         return handle_patch()
-
     return None
+
+
+def is_slow_command(cmd: str) -> bool:
+    """Returns True for commands that involve scraping."""
+    return cmd in ("/epic7codes", "epic7codes", "/czncodes", "czncodes", "/patch", "patch")
+
+
+def slow_command_message(cmd: str) -> str:
+    """Return the appropriate waiting message for slow commands."""
+    if cmd in ("/epic7codes", "epic7codes"):
+        return "\U0001f50d Scraping Epic Seven codes... please wait."
+    if cmd in ("/czncodes", "czncodes"):
+        return "\U0001f50d Scraping CZN codes... please wait."
+    if cmd in ("/patch", "patch"):
+        return "\U0001f50d Fetching Epic Seven patch notes... please wait."
+    return "\U0001f50d Fetching... please wait."
+
+
+# ---------------------------
+# TELEGRAM API HELPERS
+# ---------------------------
+
+BASE_URL = f"https://api.telegram.org/bot{config.TELEGRAM_TOKEN}"
+
+
+def send_with_keyboard(chat_id: int, text: str) -> None:
+    """Send a message with the main inline keyboard attached."""
+    try:
+        requests.post(
+            f"{BASE_URL}/sendMessage",
+            json={
+                "chat_id":      chat_id,
+                "text":         text,
+                "reply_markup": MAIN_KEYBOARD,
+            },
+            timeout=10,
+        )
+    except Exception as e:
+        print(f"[Bot] Keyboard send error: {e}")
+        telegram_client.send(chat_id, text)
+
+
+def answer_callback(callback_query_id: str, text: str = "") -> None:
+    """Acknowledge a callback query to remove the loading spinner."""
+    try:
+        requests.post(
+            f"{BASE_URL}/answerCallbackQuery",
+            json={"callback_query_id": callback_query_id, "text": text},
+            timeout=10,
+        )
+    except Exception as e:
+        print(f"[Bot] answerCallbackQuery error: {e}")
 
 
 # ---------------------------
@@ -258,7 +346,6 @@ print("=" * 40)
 config.validate()
 database.init_db()
 
-# Flush pending updates so we don't reprocess old messages on restart
 print("[Bot] Flushing pending Telegram updates...")
 _pending = telegram_client.get_updates(offset=-1)
 if _pending:
@@ -286,6 +373,26 @@ while True:
     for update in updates:
         last_update_id = update["update_id"] + 1
 
+        # --- Handle inline keyboard button presses ---
+        if "callback_query" in update:
+            cq       = update["callback_query"]
+            cq_id    = cq["id"]
+            chat_id  = cq["message"]["chat"]["id"]
+            username = cq["from"].get("username")
+            cmd      = cq["data"]  # e.g. "epic7codes", "subscribe"
+
+            answer_callback(cq_id)  # remove spinner immediately
+
+            if is_slow_command(cmd):
+                telegram_client.send(chat_id, slow_command_message(cmd))
+
+            response = get_response(cmd, chat_id, username)
+            if response:
+                # Show keyboard again after every button response
+                send_with_keyboard(chat_id, response)
+            continue
+
+        # --- Handle regular text messages ---
         if "message" not in update:
             continue
 
@@ -294,21 +401,20 @@ while True:
         username = update["message"]["from"].get("username")
         print(f"[Telegram] {chat_id} (@{username}): {text!r}")
 
-        lower = text.strip().lower()
+        cmd = text.strip().lower().split()[0] if text.strip() else ""
 
-        # Send descriptive status before slow operations
-        if lower.startswith("/epic7codes"):
-            telegram_client.send(chat_id, "\U0001f50d Scraping Epic Seven codes... please wait.")
-        elif lower.startswith("/czncodes"):
-            telegram_client.send(chat_id, "\U0001f50d Scraping CZN codes... please wait.")
-        elif lower.startswith("/patch"):
-            telegram_client.send(chat_id, "\U0001f50d Fetching latest Epic Seven patch notes... please wait.")
+        if is_slow_command(cmd):
+            telegram_client.send(chat_id, slow_command_message(cmd))
 
-        response = route_command(text, chat_id, username)
+        response = get_response(cmd, chat_id, username)
         if response:
-            telegram_client.send(chat_id, response)
+            # Commands that show the keyboard
+            if cmd in ("/start", "/help", "/about", "start", "help", "about"):
+                send_with_keyboard(chat_id, response)
+            else:
+                telegram_client.send(chat_id, response)
         elif text.strip():
-            telegram_client.send(chat_id, handle_help())
+            send_with_keyboard(chat_id, handle_help())
 
     loop_count += 1
 
