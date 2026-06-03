@@ -9,10 +9,12 @@ Run with:
 
 import requests
 import time
+from datetime import datetime, timezone, timedelta
 import config
 import telegram_client
 import scrapers
 import monitor
+import database
 
 
 # ---------------------------
@@ -26,21 +28,25 @@ def handle_welcome() -> str:
 
         "\U0001f916 What this bot does automatically:\n"
         "  \u2022 Checks for new gift codes every 15 minutes\n"
-        "  \u2022 Alerts you instantly when new codes drop\n"
-        "  \u2022 Monitors Epic Seven balance patch notes\n"
-        "  \u2022 Alerts you when a balance adjustment is detected\n\n"
+        "  \u2022 Alerts subscribers instantly when new codes drop\n"
+        "  \u2022 Warns subscribers 24hrs before codes expire\n"
+        "  \u2022 Monitors Epic Seven for balance patch notes\n"
+        "  \u2022 Alerts subscribers when a balance adjustment drops\n\n"
 
         "\U0001f3ae Games tracked:\n"
         "  \u2022 Epic Seven\n"
         "  \u2022 Chaos Zero Nightmare\n\n"
 
         "\U0001f4ac Available commands:\n\n"
-        "  /epic7codes \u2014 Get latest Epic Seven gift codes\n"
-        "  /czncodes   \u2014 Get latest CZN gift codes\n"
-        "  /patch      \u2014 Get latest Epic Seven balance patch notes\n"
-        "  /help       \u2014 Show this menu again\n\n"
+        "  /subscribe    \u2014 Get automatic alerts for codes & patches\n"
+        "  /unsubscribe  \u2014 Stop receiving automatic alerts\n"
+        "  /epic7codes   \u2014 Get latest Epic Seven gift codes\n"
+        "  /czncodes     \u2014 Get latest CZN gift codes\n"
+        "  /patch        \u2014 Get latest Epic Seven balance patch notes\n"
+        "  /status       \u2014 Check bot monitoring status\n"
+        "  /help         \u2014 Show this menu again\n\n"
 
-        "\U0001f4a1 Tip: Tap the / button at the bottom of the chat to see all commands!"
+        "\U0001f4a1 Tip: Use /subscribe to never miss a code or patch alert!"
     )
 
 
@@ -51,18 +57,87 @@ def handle_help() -> str:
 
         "\U0001f916 What I do automatically:\n"
         "  \u2022 Check for new gift codes every 15 minutes\n"
-        "  \u2022 Alert you instantly when new codes drop\n"
+        "  \u2022 Alert subscribers instantly when new codes drop\n"
+        "  \u2022 Warn subscribers 24hrs before codes expire\n"
         "  \u2022 Monitor Epic Seven for balance patch notes\n"
-        "  \u2022 Alert you when a balance adjustment is detected\n\n"
+        "  \u2022 Alert subscribers when a balance adjustment drops\n\n"
 
         "\U0001f4ac Available commands:\n\n"
-        "  /epic7codes \u2014 Get latest Epic Seven gift codes\n"
-        "  /czncodes   \u2014 Get latest CZN gift codes\n"
-        "  /patch      \u2014 Get latest Epic Seven balance patch notes\n"
-        "  /help       \u2014 Show this menu again\n\n"
+        "  /subscribe    \u2014 Get automatic alerts for codes & patches\n"
+        "  /unsubscribe  \u2014 Stop receiving automatic alerts\n"
+        "  /epic7codes   \u2014 Get latest Epic Seven gift codes\n"
+        "  /czncodes     \u2014 Get latest CZN gift codes\n"
+        "  /patch        \u2014 Get latest Epic Seven balance patch notes\n"
+        "  /status       \u2014 Check bot monitoring status\n"
+        "  /help         \u2014 Show this menu again\n\n"
 
         "\U0001f4a1 Tip: Tap the / button at the bottom of the chat to see all commands!"
     )
+
+
+def handle_subscribe(chat_id: int, username: str | None) -> str:
+    added = database.add_subscriber(chat_id, username)
+    if added:
+        count = database.get_subscriber_count()
+        return (
+            "\u2705 You're subscribed!\n\n"
+            "You will now automatically receive:\n"
+            "  \U0001f381 New gift code alerts\n"
+            "  \u23f0 Expiry warnings (24hrs before codes expire)\n"
+            "  \u2696\ufe0f Epic Seven balance patch alerts\n\n"
+            f"You're subscriber #{count}!\n\n"
+            "Use /unsubscribe anytime to stop alerts."
+        )
+    else:
+        return (
+            "\u2139\ufe0f You're already subscribed!\n\n"
+            "You'll receive alerts when new codes or patches drop.\n"
+            "Use /unsubscribe to stop alerts."
+        )
+
+
+def handle_unsubscribe(chat_id: int) -> str:
+    removed = database.remove_subscriber(chat_id)
+    if removed:
+        return (
+            "\u274c You've been unsubscribed.\n\n"
+            "You will no longer receive automatic alerts.\n"
+            "Use /subscribe anytime to turn them back on."
+        )
+    else:
+        return (
+            "\u2139\ufe0f You weren't subscribed.\n\n"
+            "Use /subscribe to start receiving automatic alerts."
+        )
+
+
+def handle_status() -> str:
+    """Show current monitoring status and next check times."""
+    states = database.get_all_monitor_states()
+    count  = database.get_subscriber_count()
+
+    lines = ["\U0001f916 Bot Monitoring Status\n"]
+
+    labels = {
+        "epic7_codes":   "Epic Seven codes",
+        "czn_codes":     "CZN codes",
+        "epic7_patches": "Epic Seven patches",
+    }
+
+    if not states:
+        lines.append("No checks run yet \u2014 first check happens in 15 minutes.\n")
+    else:
+        for state in states:
+            label      = labels.get(state["key"], state["key"])
+            status_icon = "\u2705" if state["status"] == "ok" else "\u26a0\ufe0f"
+            lines.append(f"{status_icon} {label}")
+            lines.append(f"   Last check:  {state['last_check']}")
+            lines.append(f"   Next check:  {state['next_check']}\n")
+
+    lines.append(f"\U0001f465 Subscribers: {count}")
+    lines.append("\n\U0001f550 Checks run every 15 minutes automatically.")
+
+    return "\n".join(lines)
 
 
 def handle_codes(game_key: str) -> str:
@@ -76,7 +151,7 @@ def handle_codes(game_key: str) -> str:
         return (
             f"\U0001f614 No active codes for {game['name']} right now.\n\n"
             f"Codes are released during events and updates \u2014 "
-            f"the bot will alert you as soon as new ones appear!\n\n"
+            f"use /subscribe to get alerted the moment new codes drop!\n\n"
             f"\U0001f517 Check manually: {game['codes_url']}"
         )
 
@@ -142,7 +217,7 @@ def handle_patch() -> str:
 # COMMAND ROUTER
 # ---------------------------
 
-def route_command(text: str) -> str | None:
+def route_command(text: str, chat_id: int, username: str | None) -> str | None:
     """Parse a command string and return the response, or None."""
     cmd = text.strip().lower().split()[0] if text.strip() else ""
 
@@ -151,6 +226,15 @@ def route_command(text: str) -> str | None:
 
     if cmd == "/help":
         return handle_help()
+
+    if cmd == "/subscribe":
+        return handle_subscribe(chat_id, username)
+
+    if cmd == "/unsubscribe":
+        return handle_unsubscribe(chat_id)
+
+    if cmd == "/status":
+        return handle_status()
 
     if cmd == "/epic7codes":
         return handle_codes("epic7")
@@ -172,6 +256,7 @@ print("  Game Monitor Bot starting up")
 print("=" * 40)
 
 config.validate()
+database.init_db()
 
 # Flush pending updates so we don't reprocess old messages on restart
 print("[Bot] Flushing pending Telegram updates...")
@@ -182,8 +267,11 @@ if _pending:
 else:
     last_update_id = None
 
+sub_count = database.get_subscriber_count()
 telegram_client.send_admin(
-    "\U0001f916 Game Monitor Bot started!\n\nSend /help to see commands."
+    f"\U0001f916 Game Monitor Bot started!\n\n"
+    f"\U0001f465 Current subscribers: {sub_count}\n\n"
+    f"Send /help to see commands."
 )
 
 # ---------------------------
@@ -201,13 +289,14 @@ while True:
         if "message" not in update:
             continue
 
-        chat_id = update["message"]["chat"]["id"]
-        text    = update["message"].get("text", "")
-        print(f"[Telegram] {chat_id}: {text!r}")
+        chat_id  = update["message"]["chat"]["id"]
+        text     = update["message"].get("text", "")
+        username = update["message"]["from"].get("username")
+        print(f"[Telegram] {chat_id} (@{username}): {text!r}")
 
         lower = text.strip().lower()
 
-        # Send descriptive status before processing
+        # Send descriptive status before slow operations
         if lower.startswith("/epic7codes"):
             telegram_client.send(chat_id, "\U0001f50d Scraping Epic Seven codes... please wait.")
         elif lower.startswith("/czncodes"):
@@ -215,7 +304,7 @@ while True:
         elif lower.startswith("/patch"):
             telegram_client.send(chat_id, "\U0001f50d Fetching latest Epic Seven patch notes... please wait.")
 
-        response = route_command(text)
+        response = route_command(text, chat_id, username)
         if response:
             telegram_client.send(chat_id, response)
         elif text.strip():

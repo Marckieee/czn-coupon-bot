@@ -20,12 +20,35 @@ def send(chat_id: int, text: str) -> None:
                 timeout=10,
             )
         except Exception as e:
-            print(f"[Telegram] Send error: {e}")
+            print(f"[Telegram] Send error to {chat_id}: {e}")
 
 
 def send_admin(text: str) -> None:
     """Shortcut to send a message to the admin chat."""
     send(config.ADMIN_CHAT_ID, text)
+
+
+def broadcast(chat_ids: list[int], text: str) -> tuple[int, int]:
+    """
+    Send a message to a list of chat IDs.
+    Returns (success_count, fail_count).
+    """
+    success = 0
+    failed  = 0
+    for chat_id in chat_ids:
+        try:
+            chunks = [text[i:i+4000] for i in range(0, len(text), 4000)]
+            for chunk in chunks:
+                requests.post(
+                    f"{BASE_URL}/sendMessage",
+                    data={"chat_id": chat_id, "text": chunk},
+                    timeout=10,
+                )
+            success += 1
+        except Exception as e:
+            print(f"[Telegram] Broadcast error to {chat_id}: {e}")
+            failed += 1
+    return success, failed
 
 
 def get_updates(offset: int | None = None) -> list[dict]:
