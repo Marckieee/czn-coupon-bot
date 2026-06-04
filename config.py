@@ -24,6 +24,7 @@ GAMES = {
         "name":       "Chaos Zero Nightmare",
         "codes_url":  "https://www.pocketgamer.com/chaos-zero-nightmare/codes/",
         "redeem_url": "https://page.onstove.com/chaoszeronightmare/en",
+        "patch_url":  "https://game8.co/games/Chaos-Zero-Nightmare/archives/561608",
     },
 }
 
@@ -35,6 +36,9 @@ SCRAPE_HEADERS = {
         "Chrome/124.0.0.0 Safari/537.36"
     )
 }
+
+# --- Keywords that suggest a balance adjustment patch ---
+CODE_KEYWORDS = {"code", "coupon", "redeem", "gift", "password", "free", "reward"}
 
 # --- How often background checks run (in 60s loops) ---
 SCRAPE_CHECK_INTERVAL = 15  # every 15 minutes

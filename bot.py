@@ -28,8 +28,11 @@ MAIN_KEYBOARD = {
             {"text": "\U0001f381 CZN Codes",      "callback_data": "czncodes"},
         ],
         [
-            {"text": "\u2696\ufe0f Patch Notes",  "callback_data": "patch"},
-            {"text": "\U0001f916 Status",          "callback_data": "status"},
+            {"text": "\u2696\ufe0f E7 Patch Notes",  "callback_data": "epic7patch"},
+            {"text": "\u2696\ufe0f CZN Patch Notes", "callback_data": "cznpatch"},
+        ],
+        [
+            {"text": "\U0001f916 Status",             "callback_data": "status"},
         ],
         [
             {"text": "\U0001f3ac Epic7 Videos",   "callback_data": "epic7videos"},
@@ -59,7 +62,7 @@ def handle_welcome() -> str:
         "  \u2022 Checks for new gift codes every 15 minutes\n"
         "  \u2022 Alerts subscribers instantly when new codes drop\n"
         "  \u2022 Warns subscribers 24hrs before codes expire\n"
-        "  \u2022 Monitors Epic Seven for balance patch notes\n"
+        "  \u2022 Monitors Epic Seven & CZN for balance patch notes\n"
         "  \u2022 Alerts subscribers when a balance adjustment drops\n"
         "  \u2022 Monitors official YouTube channels for new videos\n\n"
 
@@ -88,7 +91,8 @@ def handle_help() -> str:
         "  /unsubscribe  \u2014 Stop automatic alerts\n"
         "  /epic7codes   \u2014 Latest Epic Seven gift codes\n"
         "  /czncodes     \u2014 Latest CZN gift codes\n"
-        "  /patch        \u2014 Latest Epic Seven balance patch notes\n"
+        "  /epic7patch   \u2014 Latest Epic Seven balance patch notes\n"
+        "  /cznpatch     \u2014 Latest CZN balance patch notes\n"
         "  /epic7videos  \u2014 Latest Epic Seven YouTube videos\n"
         "  /cznvideos    \u2014 Latest CZN YouTube videos\n"
         "  /status       \u2014 Bot monitoring status\n"
@@ -233,36 +237,61 @@ def handle_codes(game_key: str) -> str:
     return "\n".join(lines)
 
 
-def handle_patch() -> str:
-    patch_url = config.GAMES["epic7"].get("patch_url")
+def _fetch_patch_posts(game_key: str) -> list[tuple[str, str]]:
+    """Shared helper — scrapes patch post titles and links for any game."""
+    game      = config.GAMES.get(game_key, {})
+    patch_url = game.get("patch_url")
+    if not patch_url:
+        return []
 
     try:
         r = requests.get(patch_url, headers=config.SCRAPE_HEADERS, timeout=15)
         r.raise_for_status()
     except Exception:
-        return f"\u26a0\ufe0f Could not fetch patch notes.\nCheck manually: {patch_url}"
+        return []
 
     from bs4 import BeautifulSoup
-    soup = BeautifulSoup(r.text, "html.parser")
-
+    soup  = BeautifulSoup(r.text, "html.parser")
     posts = []
-    seen = set()
+    seen  = set()
+
     for a in soup.find_all("a", href=True):
-        href = a["href"]
-        if "/news/" in href:
-            title    = a.get_text(strip=True)
-            full_url = href if href.startswith("http") else "https://epic7db.com" + href
-            if title and len(title) > 5 and full_url not in seen:
-                seen.add(full_url)
-                posts.append((title, full_url))
+        href  = a["href"]
+        title = a.get_text(strip=True)
+        # Epic7: links contain /news/  |  CZN game8: links contain /archives/
+        if ("/news/" in href or "/archives/" in href) and href != patch_url:
+            if href.startswith("/"):
+                # Resolve relative URLs
+                from urllib.parse import urlparse
+                base = urlparse(patch_url)
+                href = f"{base.scheme}://{base.netloc}{href}"
+            if title and len(title) > 5 and href not in seen:
+                seen.add(href)
+                posts.append((title, href))
+
+    return posts
+
+
+def handle_patch(game_key: str = "epic7") -> str:
+    """Fetch and display patch note titles with links — clean and minimal."""
+    game      = config.GAMES.get(game_key, {})
+    patch_url = game.get("patch_url", "")
+    name      = game.get("name", game_key)
+
+    posts = _fetch_patch_posts(game_key)
 
     if not posts:
-        return f"\u26a0\ufe0f No patch notes found.\nCheck manually: {patch_url}"
+        return (
+            f"\u26a0\ufe0f Could not fetch patch notes for {name}.\n\n"
+            f"\U0001f517 Check manually: {patch_url}"
+        )
 
-    lines = ["\u2696\ufe0f Latest Epic Seven Patch Notes\n"]
+    lines = [f"\u2696\ufe0f {name} Patch Notes\n"]
     for title, url in posts[:8]:
         lines.append(f"\u2022 {title}")
-        lines.append(f"  {url}\n")
+        lines.append(f"  \U0001f517 {url}\n")
+
+    lines.append(f"\U0001f4cb Full list: {patch_url}")
 
     return "\n".join(lines)
 
@@ -321,8 +350,10 @@ def get_response(cmd: str, chat_id: int, username: str | None) -> str | None:
         return handle_codes("epic7")
     if cmd in ("/czncodes", "czncodes"):
         return handle_codes("czn")
-    if cmd in ("/patch", "patch"):
-        return handle_patch()
+    if cmd in ("/epic7patch", "epic7patch", "/patch", "patch"):
+        return handle_patch("epic7")
+    if cmd in ("/cznpatch", "cznpatch"):
+        return handle_patch("czn")
     if cmd in ("/epic7videos", "epic7videos"):
         return handle_videos("epic7")
     if cmd in ("/cznvideos", "uznvideos", "czn videos"):
@@ -335,6 +366,8 @@ def is_slow_command(cmd: str) -> bool:
         "/epic7codes", "epic7codes",
         "/czncodes",   "czncodes",
         "/patch",      "patch",
+        "/epic7patch", "epic7patch",
+        "/cznpatch",   "cznpatch",
         "/epic7videos","epic7videos",
         "/uznvideos",  "uznvideos",
     )
@@ -345,8 +378,10 @@ def slow_command_message(cmd: str) -> str:
         return "\U0001f50d Scraping Epic Seven codes... please wait."
     if cmd in ("/czncodes", "czncodes"):
         return "\U0001f50d Scraping CZN codes... please wait."
-    if cmd in ("/patch", "patch"):
+    if cmd in ("/patch", "patch", "/epic7patch", "epic7patch"):
         return "\U0001f50d Fetching Epic Seven patch notes... please wait."
+    if cmd in ("/cznpatch", "cznpatch"):
+        return "\U0001f50d Fetching CZN patch notes... please wait."
     if cmd in ("/epic7videos", "epic7videos"):
         return "\U0001f50d Fetching latest Epic Seven videos... please wait."
     if cmd in ("/uznvideos", "uznvideos", "/czn videos", "czn videos"):
@@ -476,6 +511,8 @@ while True:
         monitor.check_pages()
         print("[Monitor] Checking Epic Seven patch notes...")
         monitor.check_epic7_patches()
+        print("[Monitor] Checking CZN patch notes...")
+        monitor.check_czn_patches()
         print("[Monitor] Checking YouTube channels...")
         youtube_monitor.check_youtube()
         loop_count = 0

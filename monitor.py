@@ -157,10 +157,11 @@ def check_pages() -> None:
     database.clear_old_codes(days=7)
 
 
-def check_epic7_patches() -> None:
-    """Check for new Epic Seven balance patch notes and broadcast to subscribers."""
-    game      = config.GAMES["epic7"]
+def _check_patches(game_key: str) -> None:
+    """Generic patch checker — works for any game in config.GAMES."""
+    game      = config.GAMES.get(game_key, {})
     patch_url = game.get("patch_url")
+    name      = game.get("name", game_key)
     if not patch_url:
         return
 
@@ -171,54 +172,65 @@ def check_epic7_patches() -> None:
 
     except Exception as e:
         _fail_counts[patch_url] = _fail_counts.get(patch_url, 0) + 1
-        print(f"[Monitor] Patch fetch failed ({_fail_counts[patch_url]}/{MAX_FAILS}): {e}")
+        print(f"[Monitor] Patch fetch failed for {name} ({_fail_counts[patch_url]}/{MAX_FAILS}): {e}")
         if _fail_counts[patch_url] >= MAX_FAILS:
             telegram_client.send_admin(
-                f"\u26a0\ufe0f Source down: Epic Seven patch notes\n\n"
+                f"\u26a0\ufe0f Source down: {name} patch notes\n\n"
                 f"Failed {MAX_FAILS} checks in a row.\n"
                 f"\U0001f517 {patch_url}"
             )
             _fail_counts[patch_url] = 0
         return
 
-    soup = BeautifulSoup(r.text, "html.parser")
-    posts = []
+    soup      = BeautifulSoup(r.text, "html.parser")
+    posts     = []
     seen_urls = set()
 
     for a in soup.find_all("a", href=True):
-        href = a["href"]
-        if "/news/" in href and href != patch_url:
-            title    = a.get_text(strip=True)
-            full_url = href if href.startswith("http") else "https://epic7db.com" + href
-            if title and len(title) > 5 and full_url not in seen_urls:
-                seen_urls.add(full_url)
-                posts.append((title, full_url))
+        href  = a["href"]
+        title = a.get_text(strip=True)
+        if ("/news/" in href or "/archives/" in href) and href != patch_url:
+            if href.startswith("/"):
+                from urllib.parse import urlparse
+                base = urlparse(patch_url)
+                href = f"{base.scheme}://{base.netloc}{href}"
+            if title and len(title) > 5 and href not in seen_urls:
+                seen_urls.add(href)
+                posts.append((title, href))
 
     current_hash = hashlib.md5(r.text.encode()).hexdigest()
-    patch_key    = "epic7_patches"
+    patch_key_db = f"{game_key}_patches"
 
-    if patch_key in _page_hashes and _page_hashes[patch_key] != current_hash:
-        for title, url in posts[:5]:
-            if any(kw in title.lower() for kw in BALANCE_KEYWORDS):
-                alert = (
-                    f"\u2696\ufe0f Epic Seven Balance Adjustment Detected!\n\n"
-                    f"\U0001f4cc {title}\n"
-                    f"\U0001f517 {url}\n\n"
-                    f"Full patch notes:\n{patch_url}"
-                )
-                subscribers = database.get_all_subscribers()
-                if subscribers:
-                    ok, fail = telegram_client.broadcast(subscribers, alert)
-                    print(f"[Monitor] Patch alert sent to {ok} subscribers ({fail} failed)")
-                else:
-                    telegram_client.send_admin(alert)
-                break
+    if patch_key_db in _page_hashes and _page_hashes[patch_key_db] != current_hash:
+        # Page changed — alert on the first relevant post title
+        if posts:
+            title, url = posts[0]
+            alert = (
+                f"\u2696\ufe0f {name} Patch Notes Updated!\n\n"
+                f"\U0001f4cc {title}\n"
+                f"\U0001f517 {url}\n\n"
+                f"Full list: {patch_url}"
+            )
+            subscribers = database.get_all_subscribers()
+            if subscribers:
+                ok, fail = telegram_client.broadcast(subscribers, alert)
+                print(f"[Monitor] Patch alert sent to {ok} subscribers ({fail} failed)")
+            else:
+                telegram_client.send_admin(alert)
 
-    _page_hashes[patch_key] = current_hash
+    _page_hashes[patch_key_db] = current_hash
 
     database.update_monitor_state(
-        key        = "epic7_patches",
+        key        = patch_key_db,
         last_check = _now(),
         next_check = _next_check_time(),
         status     = "ok"
     )
+
+
+def check_epic7_patches() -> None:
+    _check_patches("epic7")
+
+
+def check_czn_patches() -> None:
+    _check_patches("czn")
