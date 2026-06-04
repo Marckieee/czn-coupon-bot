@@ -237,8 +237,15 @@ def handle_codes(game_key: str) -> str:
     return "\n".join(lines)
 
 
-def _fetch_patch_posts(game_key: str) -> list[tuple[str, str]]:
-    """Shared helper — scrapes patch post titles and links for any game."""
+def _fetch_patch_posts(game_key: str) -> list[tuple[str, str, str]]:
+    """
+    Shared helper — scrapes patch post titles, links and dates.
+    Returns list of (title, url, date) tuples.
+
+    Date extraction:
+      - CZN (game8): dates are in the table cell next to the title e.g. "(April 8, 2026)"
+      - Epic7 (epic7db): dates are often in the title itself e.g. "5/28 Balance Adjustment"
+    """
     game      = config.GAMES.get(game_key, {})
     patch_url = game.get("patch_url")
     if not patch_url:
@@ -251,29 +258,77 @@ def _fetch_patch_posts(game_key: str) -> list[tuple[str, str]]:
         return []
 
     from bs4 import BeautifulSoup
+    from urllib.parse import urlparse
+    import re
+
     soup  = BeautifulSoup(r.text, "html.parser")
     posts = []
     seen  = set()
+    base  = urlparse(patch_url)
 
-    for a in soup.find_all("a", href=True):
-        href  = a["href"]
-        title = a.get_text(strip=True)
-        # Epic7: links contain /news/  |  CZN game8: links contain /archives/
-        if ("/news/" in href or "/archives/" in href) and href != patch_url:
+    # --- CZN: game8.co has a proper <table> with date in the title cell ---
+    if "game8.co" in patch_url:
+        for row in soup.find_all("tr"):
+            cells = row.find_all("td")
+            if not cells:
+                continue
+            a = cells[0].find("a", href=True)
+            if not a:
+                continue
+            href  = a["href"]
             if href.startswith("/"):
-                # Resolve relative URLs
-                from urllib.parse import urlparse
-                base = urlparse(patch_url)
                 href = f"{base.scheme}://{base.netloc}{href}"
-            if title and len(title) > 5 and href not in seen:
+            if href in seen:
+                continue
+
+            # Title is the link text; date is usually in parentheses after it
+            full_text = cells[0].get_text(separator=" ", strip=True)
+            title     = a.get_text(strip=True)
+
+            # Extract date from parentheses e.g. "(April 8, 2026)"
+            date_match = re.search(r"\(([A-Za-z]+ \d{1,2},?\s*\d{4})\)", full_text)
+            date = date_match.group(1) if date_match else ""
+
+            if title and len(title) > 5:
                 seen.add(href)
-                posts.append((title, href))
+                posts.append((title, href, date))
+
+    # --- Epic7: epic7db.com — each <a> under /news/ contains
+    #     "TITLE  DATE  snippet...  Read More" all as one text block.
+    #     We only want the first line (the actual title).
+    else:
+        for a in soup.find_all("a", href=True):
+            href = a["href"]
+            if "/news/" in href and href != patch_url:
+                if href.startswith("/"):
+                    href = f"{base.scheme}://{base.netloc}{href}"
+                if href in seen:
+                    continue
+
+                # Get all text lines, skip blanks
+                lines = [l.strip() for l in a.get_text("\n").splitlines() if l.strip()]
+                if not lines:
+                    continue
+
+                # First line = title  e.g. "6/4 (Thu) Maintenance Notice"
+                title = lines[0]
+
+                # Second line = date  e.g. "June 3, 2026"
+                date = lines[1] if len(lines) > 1 else ""
+
+                # Skip navigation links like "Back", "Next", page numbers
+                if title.lower() in ("back", "next") or title.isdigit():
+                    continue
+
+                if len(title) > 3:
+                    seen.add(href)
+                    posts.append((title, href, date))
 
     return posts
 
 
 def handle_patch(game_key: str = "epic7") -> str:
-    """Fetch and display patch note titles with links — clean and minimal."""
+    """Fetch and display patch note titles with release dates and links."""
     game      = config.GAMES.get(game_key, {})
     patch_url = game.get("patch_url", "")
     name      = game.get("name", game_key)
@@ -287,8 +342,9 @@ def handle_patch(game_key: str = "epic7") -> str:
         )
 
     lines = [f"\u2696\ufe0f {name} Patch Notes\n"]
-    for title, url in posts[:8]:
-        lines.append(f"\u2022 {title}")
+    for title, url, date in posts[:8]:
+        date_str = f" \U0001f4c5 {date}" if date else ""
+        lines.append(f"\u2022 {title}{date_str}")
         lines.append(f"  \U0001f517 {url}\n")
 
     lines.append(f"\U0001f4cb Full list: {patch_url}")

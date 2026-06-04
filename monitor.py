@@ -186,28 +186,33 @@ def _check_patches(game_key: str) -> None:
     posts     = []
     seen_urls = set()
 
+    import re
+    from urllib.parse import urlparse
+    base = urlparse(patch_url)
+
     for a in soup.find_all("a", href=True):
         href  = a["href"]
         title = a.get_text(strip=True)
         if ("/news/" in href or "/archives/" in href) and href != patch_url:
             if href.startswith("/"):
-                from urllib.parse import urlparse
-                base = urlparse(patch_url)
                 href = f"{base.scheme}://{base.netloc}{href}"
             if title and len(title) > 5 and href not in seen_urls:
                 seen_urls.add(href)
-                posts.append((title, href))
+                # Extract date from title
+                date_match = re.search(r"(\d{1,2}/\d{1,2}|[A-Za-z]+ \d{1,2},?\s*\d{4})", title)
+                date = date_match.group(1) if date_match else ""
+                posts.append((title, href, date))
 
     current_hash = hashlib.md5(r.text.encode()).hexdigest()
     patch_key_db = f"{game_key}_patches"
 
     if patch_key_db in _page_hashes and _page_hashes[patch_key_db] != current_hash:
-        # Page changed — alert on the first relevant post title
         if posts:
-            title, url = posts[0]
+            title, url, date = posts[0]
+            date_str = f"\n\U0001f4c5 {date}" if date else ""
             alert = (
                 f"\u2696\ufe0f {name} Patch Notes Updated!\n\n"
-                f"\U0001f4cc {title}\n"
+                f"\U0001f4cc {title}{date_str}\n"
                 f"\U0001f517 {url}\n\n"
                 f"Full list: {patch_url}"
             )
