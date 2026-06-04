@@ -5,7 +5,7 @@ using YouTube's public RSS feeds — no API key required.
 
 Channels monitored:
   Epic Seven  → UCa1C3tWzsn4FFRR7t3LqU5w
-  CZN         → UCmzdpIDekCvB6dooVPAVzqw
+  CZN         → UCQ7YAXPdiccbFBmwuGvO3Jg
 """
 
 import requests
@@ -40,7 +40,7 @@ YOUTUBE_CHANNELS = {
         "channel_url": "https://www.youtube.com/channel/UCa1C3tWzsn4FFRR7t3LqU5w",
     },
     "czn": {
-        "channel_id":  "UCmzdpIDekCvB6dooVPAVzqw",
+        "channel_id":  "UCQ7YAXPdiccbFBmwuGvO3Jg",
         "name":        "Chaos Zero Nightmare",
         "channel_url": "https://www.youtube.com/@ChaosZeroNightmare_EN",
     },
