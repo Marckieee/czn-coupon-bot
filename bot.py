@@ -352,6 +352,51 @@ def handle_patch(game_key: str = "epic7") -> str:
     return "\n".join(lines)
 
 
+def handle_debug() -> str:
+    """Debug command to test YouTube API directly."""
+    import os
+    import requests as req
+
+    api_key = os.getenv("YOUTUBE_API_KEY", "")
+    if not api_key:
+        return "ERROR: YOUTUBE_API_KEY not set in Railway variables!"
+
+    results = [f"API key found: {api_key[:8]}...\n"]
+
+    for game_key, channel in youtube_monitor.YOUTUBE_CHANNELS.items():
+        channel_id  = channel["channel_id"]
+        playlist_id = "UU" + channel_id[2:]
+        results.append(f"Testing {channel['name']}:")
+        results.append(f"  Channel ID:  {channel_id}")
+        results.append(f"  Playlist ID: {playlist_id}")
+
+        try:
+            r = req.get(
+                "https://www.googleapis.com/youtube/v3/playlistItems",
+                params={
+                    "key":        api_key,
+                    "playlistId": playlist_id,
+                    "part":       "snippet",
+                    "maxResults": 3,
+                },
+                timeout=15,
+            )
+            data = r.json()
+            if "error" in data:
+                results.append(f"  ERROR: {data['error'].get('message')}")
+            else:
+                items = data.get("items", [])
+                results.append(f"  Videos found: {len(items)}")
+                for item in items[:2]:
+                    title = item["snippet"].get("title", "?")
+                    results.append(f"    - {title}")
+        except Exception as e:
+            results.append(f"  EXCEPTION: {e}")
+        results.append("")
+
+    return "\n".join(results)
+
+
 def handle_videos(game_key: str) -> str:
     """Fetch and display the latest YouTube videos for a game."""
     channel = youtube_monitor.YOUTUBE_CHANNELS.get(game_key)
@@ -414,6 +459,8 @@ def get_response(cmd: str, chat_id: int, username: str | None) -> str | None:
         return handle_videos("epic7")
     if cmd in ("/cznvideos", "uznvideos", "czn videos"):
         return handle_videos("czn")
+    if cmd in ("/debug", "debug"):
+        return handle_debug()
     return None
 
 
