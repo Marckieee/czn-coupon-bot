@@ -457,7 +457,7 @@ def get_response(cmd: str, chat_id: int, username: str | None) -> str | None:
         return handle_patch("czn")
     if cmd in ("/epic7videos", "epic7videos"):
         return handle_videos("epic7")
-    if cmd in ("/cznvideos", "uznvideos", "czn videos"):
+    if cmd in ("/cznvideos", "cznvideos"):
         return handle_videos("czn")
     if cmd in ("/debug", "debug"):
         return handle_debug()
@@ -472,7 +472,7 @@ def is_slow_command(cmd: str) -> bool:
         "/epic7patch", "epic7patch",
         "/cznpatch",   "cznpatch",
         "/epic7videos","epic7videos",
-        "/uznvideos",  "uznvideos",
+        "/cznvideos",  "cznvideos",
     )
 
 
@@ -487,7 +487,7 @@ def slow_command_message(cmd: str) -> str:
         return "\U0001f50d Fetching CZN patch notes... please wait."
     if cmd in ("/epic7videos", "epic7videos"):
         return "\U0001f50d Fetching latest Epic Seven videos... please wait."
-    if cmd in ("/uznvideos", "uznvideos", "/czn videos", "czn videos"):
+    if cmd in ("/cznvideos", "cznvideos"):
         return "\U0001f50d Fetching latest CZN videos... please wait."
     return "\U0001f50d Fetching... please wait."
 
