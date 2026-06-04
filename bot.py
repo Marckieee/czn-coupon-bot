@@ -8,13 +8,12 @@ Run with:
 """
 
 import requests
-import json
 import time
-from datetime import datetime, timezone, timedelta
 import config
 import telegram_client
 import scrapers
 import monitor
+import youtube_monitor
 import database
 
 
@@ -25,12 +24,16 @@ import database
 MAIN_KEYBOARD = {
     "inline_keyboard": [
         [
-            {"text": "\U0001f381 Epic7 Codes",  "callback_data": "epic7codes"},
-            {"text": "\U0001f381 CZN Codes",     "callback_data": "czncodes"},
+            {"text": "\U0001f381 Epic7 Codes",   "callback_data": "epic7codes"},
+            {"text": "\U0001f381 CZN Codes",      "callback_data": "czncodes"},
         ],
         [
-            {"text": "\u2696\ufe0f Patch Notes", "callback_data": "patch"},
-            {"text": "\U0001f916 Status",         "callback_data": "status"},
+            {"text": "\u2696\ufe0f Patch Notes",  "callback_data": "patch"},
+            {"text": "\U0001f916 Status",          "callback_data": "status"},
+        ],
+        [
+            {"text": "\U0001f3ac Epic7 Videos",   "callback_data": "epic7videos"},
+            {"text": "\U0001f3ac CZN Videos",     "callback_data": "cznvideos"},
         ],
         [
             {"text": "\U0001f514 Subscribe",      "callback_data": "subscribe"},
@@ -57,7 +60,8 @@ def handle_welcome() -> str:
         "  \u2022 Alerts subscribers instantly when new codes drop\n"
         "  \u2022 Warns subscribers 24hrs before codes expire\n"
         "  \u2022 Monitors Epic Seven for balance patch notes\n"
-        "  \u2022 Alerts subscribers when a balance adjustment drops\n\n"
+        "  \u2022 Alerts subscribers when a balance adjustment drops\n"
+        "  \u2022 Monitors official YouTube channels for new videos\n\n"
 
         "\U0001f3ae Games tracked:\n"
         "  \u2022 Epic Seven\n"
@@ -76,7 +80,8 @@ def handle_help() -> str:
         "  \u2022 Alert subscribers instantly when new codes drop\n"
         "  \u2022 Warn subscribers 24hrs before codes expire\n"
         "  \u2022 Monitor Epic Seven for balance patch notes\n"
-        "  \u2022 Alert subscribers when a balance adjustment drops\n\n"
+        "  \u2022 Alert subscribers when a balance adjustment drops\n"
+        "  \u2022 Monitor official YouTube channels for new videos\n\n"
 
         "\U0001f4ac Available commands:\n\n"
         "  /subscribe    \u2014 Get automatic alerts\n"
@@ -84,6 +89,8 @@ def handle_help() -> str:
         "  /epic7codes   \u2014 Latest Epic Seven gift codes\n"
         "  /czncodes     \u2014 Latest CZN gift codes\n"
         "  /patch        \u2014 Latest Epic Seven balance patch notes\n"
+        "  /epic7videos  \u2014 Latest Epic Seven YouTube videos\n"
+        "  /cznvideos    \u2014 Latest CZN YouTube videos\n"
         "  /status       \u2014 Bot monitoring status\n"
         "  /about        \u2014 About this bot\n"
         "  /help         \u2014 Show this menu\n\n"
@@ -97,21 +104,24 @@ def handle_about() -> str:
         "\u2139\ufe0f About This Bot\n\n"
 
         "\U0001f916 E7 & CZN Game Monitor Bot\n"
-        "Version: 1.0.0\n\n"
+        "Version: 1.1.0\n\n"
 
         "\U0001f4cb What it tracks:\n"
         "  \u2022 Epic Seven gift codes\n"
         "  \u2022 Chaos Zero Nightmare gift codes\n"
-        "  \u2022 Epic Seven balance patch notes\n\n"
+        "  \u2022 Epic Seven balance patch notes\n"
+        "  \u2022 Epic Seven & CZN official YouTube videos\n\n"
 
         "\U0001f517 Data sources:\n"
         "  \u2022 ucngame.com (Epic Seven codes)\n"
         "  \u2022 pocketgamer.com (CZN codes)\n"
-        "  \u2022 epic7db.com (Patch notes)\n\n"
+        "  \u2022 epic7db.com (Patch notes)\n"
+        "  \u2022 YouTube RSS feeds (New videos)\n\n"
 
         "\u23f1 Update frequency:\n"
         "  \u2022 Codes checked every 15 minutes\n"
         "  \u2022 Patch notes checked every 15 minutes\n"
+        "  \u2022 YouTube videos checked every 15 minutes\n"
         "  \u2022 Expiry warnings sent 24hrs before codes expire\n\n"
 
         "\U0001f4e3 Alerts:\n"
@@ -131,14 +141,15 @@ def handle_subscribe(chat_id: int, username: str | None) -> str:
             "You will now automatically receive:\n"
             "  \U0001f381 New gift code alerts\n"
             "  \u23f0 Expiry warnings (24hrs before codes expire)\n"
-            "  \u2696\ufe0f Epic Seven balance patch alerts\n\n"
+            "  \u2696\ufe0f Epic Seven balance patch alerts\n"
+            "  \U0001f3ac New YouTube video alerts\n\n"
             f"You're subscriber #{count}!\n\n"
             "Use /unsubscribe anytime to stop alerts."
         )
     else:
         return (
             "\u2139\ufe0f You're already subscribed!\n\n"
-            "You'll receive alerts when new codes or patches drop.\n"
+            "You'll receive alerts for codes, patches and new videos.\n"
             "Use /unsubscribe to stop alerts."
         )
 
@@ -168,10 +179,12 @@ def handle_status() -> str:
         "epic7_codes":   "Epic Seven codes",
         "czn_codes":     "CZN codes",
         "epic7_patches": "Epic Seven patches",
+        "epic7_youtube": "Epic Seven YouTube",
+        "czn_youtube":   "CZN YouTube",
     }
 
     if not states:
-        lines.append("No checks run yet \u2014 first check happens in 15 minutes.\n")
+        lines.append("No checks run yet \u2014 first check in 15 minutes.\n")
     else:
         for state in states:
             label       = labels.get(state["key"], state["key"])
@@ -181,7 +194,7 @@ def handle_status() -> str:
             lines.append(f"   Next check:  {state['next_check']}\n")
 
     lines.append(f"\U0001f465 Subscribers: {count}")
-    lines.append("\n\U0001f550 Checks run every 15 minutes automatically.")
+    lines.append("\n\U0001f550 All checks run every 15 minutes automatically.")
 
     return "\n".join(lines)
 
@@ -192,7 +205,6 @@ def handle_codes(game_key: str) -> str:
         return "\u2753 Unknown game."
 
     codes = scrapers.get_codes(game_key)
-
     if not codes:
         return (
             f"\U0001f614 No active codes for {game['name']} right now.\n\n"
@@ -257,12 +269,44 @@ def handle_patch() -> str:
     return "\n".join(lines)
 
 
+def handle_videos(game_key: str) -> str:
+    """Fetch and display the latest YouTube videos for a game."""
+    channel = youtube_monitor.YOUTUBE_CHANNELS.get(game_key)
+    if not channel:
+        return "\u2753 Unknown game."
+
+    videos = youtube_monitor.get_latest_videos(game_key, limit=5)
+    if not videos:
+        return (
+            f"\u26a0\ufe0f Could not fetch videos for {channel['name']}.\n\n"
+            f"\U0001f517 Visit the channel directly:\n"
+            f"https://www.youtube.com/channel/{channel['channel_id']}"
+        )
+
+    lines = [f"\U0001f3ac Latest {channel['name']} Videos\n"]
+    for v in videos:
+        # Format published date nicely if possible
+        published = v.get("published", "")
+        try:
+            from datetime import datetime
+            dt = datetime.fromisoformat(published.replace("Z", "+00:00"))
+            published = dt.strftime("%d %b %Y")
+        except Exception:
+            pass
+
+        lines.append(f"\u2022 {v['title']}")
+        if published:
+            lines.append(f"  \U0001f4c5 {published}")
+        lines.append(f"  \U0001f517 {v['url']}\n")
+
+    return "\n".join(lines)
+
+
 # ---------------------------
 # COMMAND ROUTER
 # ---------------------------
 
 def get_response(cmd: str, chat_id: int, username: str | None) -> str | None:
-    """Map a command string to a response."""
     if cmd in ("/start", "start"):
         return handle_welcome()
     if cmd in ("/help", "help"):
@@ -281,34 +325,45 @@ def get_response(cmd: str, chat_id: int, username: str | None) -> str | None:
         return handle_codes("czn")
     if cmd in ("/patch", "patch"):
         return handle_patch()
+    if cmd in ("/epic7videos", "epic7videos"):
+        return handle_videos("epic7")
+    if cmd in ("/cznvideos", "uznvideos", "czn videos"):
+        return handle_videos("czn")
     return None
 
 
 def is_slow_command(cmd: str) -> bool:
-    """Returns True for commands that involve scraping."""
-    return cmd in ("/epic7codes", "epic7codes", "/czncodes", "czncodes", "/patch", "patch")
+    return cmd in (
+        "/epic7codes", "epic7codes",
+        "/czncodes",   "czncodes",
+        "/patch",      "patch",
+        "/epic7videos","epic7videos",
+        "/uznvideos",  "uznvideos",
+    )
 
 
 def slow_command_message(cmd: str) -> str:
-    """Return the appropriate waiting message for slow commands."""
     if cmd in ("/epic7codes", "epic7codes"):
         return "\U0001f50d Scraping Epic Seven codes... please wait."
     if cmd in ("/czncodes", "czncodes"):
         return "\U0001f50d Scraping CZN codes... please wait."
     if cmd in ("/patch", "patch"):
         return "\U0001f50d Fetching Epic Seven patch notes... please wait."
+    if cmd in ("/epic7videos", "epic7videos"):
+        return "\U0001f50d Fetching latest Epic Seven videos... please wait."
+    if cmd in ("/uznvideos", "uznvideos", "/czn videos", "czn videos"):
+        return "\U0001f50d Fetching latest CZN videos... please wait."
     return "\U0001f50d Fetching... please wait."
 
 
 # ---------------------------
-# TELEGRAM API HELPERS
+# TELEGRAM KEYBOARD HELPER
 # ---------------------------
 
 BASE_URL = f"https://api.telegram.org/bot{config.TELEGRAM_TOKEN}"
 
 
 def send_with_keyboard(chat_id: int, text: str) -> None:
-    """Send a message with the main inline keyboard attached."""
     try:
         requests.post(
             f"{BASE_URL}/sendMessage",
@@ -324,12 +379,11 @@ def send_with_keyboard(chat_id: int, text: str) -> None:
         telegram_client.send(chat_id, text)
 
 
-def answer_callback(callback_query_id: str, text: str = "") -> None:
-    """Acknowledge a callback query to remove the loading spinner."""
+def answer_callback(callback_query_id: str) -> None:
     try:
         requests.post(
             f"{BASE_URL}/answerCallbackQuery",
-            json={"callback_query_id": callback_query_id, "text": text},
+            json={"callback_query_id": callback_query_id},
             timeout=10,
         )
     except Exception as e:
@@ -354,6 +408,8 @@ if _pending:
 else:
     last_update_id = None
 
+youtube_monitor.preload_seen_videos()
+
 sub_count = database.get_subscriber_count()
 telegram_client.send_admin(
     f"\U0001f916 Game Monitor Bot started!\n\n"
@@ -373,26 +429,25 @@ while True:
     for update in updates:
         last_update_id = update["update_id"] + 1
 
-        # --- Handle inline keyboard button presses ---
+        # --- Inline keyboard button presses ---
         if "callback_query" in update:
             cq       = update["callback_query"]
             cq_id    = cq["id"]
             chat_id  = cq["message"]["chat"]["id"]
             username = cq["from"].get("username")
-            cmd      = cq["data"]  # e.g. "epic7codes", "subscribe"
+            cmd      = cq["data"]
 
-            answer_callback(cq_id)  # remove spinner immediately
+            answer_callback(cq_id)
 
             if is_slow_command(cmd):
                 telegram_client.send(chat_id, slow_command_message(cmd))
 
             response = get_response(cmd, chat_id, username)
             if response:
-                # Show keyboard again after every button response
                 send_with_keyboard(chat_id, response)
             continue
 
-        # --- Handle regular text messages ---
+        # --- Regular text messages ---
         if "message" not in update:
             continue
 
@@ -408,8 +463,7 @@ while True:
 
         response = get_response(cmd, chat_id, username)
         if response:
-            # Commands that show the keyboard
-            if cmd in ("/start", "/help", "/about", "start", "help", "about"):
+            if cmd in ("/start", "start", "/help", "help", "/about", "about"):
                 send_with_keyboard(chat_id, response)
             else:
                 telegram_client.send(chat_id, response)
@@ -420,10 +474,12 @@ while True:
 
     # Background checks every 15 minutes (180 x 5s loops)
     if loop_count % 180 == 0:
-        print("[Monitor] Checking codes pages for updates...")
+        print("[Monitor] Checking codes pages...")
         monitor.check_pages()
         print("[Monitor] Checking Epic Seven patch notes...")
         monitor.check_epic7_patches()
+        print("[Monitor] Checking YouTube channels...")
+        youtube_monitor.check_youtube()
         loop_count = 0
 
     time.sleep(5)
