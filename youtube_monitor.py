@@ -19,18 +19,34 @@ import database
 # YouTube RSS feed base URL
 YT_RSS_BASE = "https://www.youtube.com/feeds/videos.xml?channel_id="
 
-# Headers that mimic a real browser more closely
-YT_HEADERS = {
-    "User-Agent": (
+# Multiple User-Agent strings to rotate through if one gets blocked
+YT_USER_AGENTS = [
+    (
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
         "AppleWebKit/537.36 (KHTML, like Gecko) "
         "Chrome/124.0.0.0 Safari/537.36"
     ),
-    "Accept":          "application/rss+xml, application/xml, text/xml, */*",
-    "Accept-Language": "en-US,en;q=0.9",
-    "Accept-Encoding": "gzip, deflate, br",
-    "Cache-Control":   "no-cache",
-}
+    (
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+        "AppleWebKit/605.1.15 (KHTML, like Gecko) "
+        "Version/17.0 Safari/605.1.15"
+    ),
+    (
+        "Mozilla/5.0 (X11; Linux x86_64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/122.0.0.0 Safari/537.36"
+    ),
+]
+
+def _make_headers(index: int = 0) -> dict:
+    return {
+        "User-Agent":      YT_USER_AGENTS[index % len(YT_USER_AGENTS)],
+        "Accept":          "application/rss+xml, application/xml, text/xml, */*",
+        "Accept-Language": "en-US,en;q=0.9",
+        "Accept-Encoding": "gzip, deflate",
+        "Cache-Control":   "no-cache",
+        "Referer":         "https://www.youtube.com/",
+    }
 
 # Channel IDs for each game
 YOUTUBE_CHANNELS = {
@@ -60,21 +76,27 @@ NS = {
 def _fetch_feed(channel_id: str) -> list[dict]:
     """
     Fetch a YouTube RSS feed and return a list of video dicts.
-    Tries two different URL formats in case one is blocked.
+    Rotates User-Agent strings and tries multiple URL formats.
     """
     urls_to_try = [
         f"https://www.youtube.com/feeds/videos.xml?channel_id={channel_id}",
         f"https://www.youtube.com/feeds/videos.xml?channel_id={channel_id}&hl=en",
+        f"https://www.youtube.com/feeds/videos.xml?channel_id={channel_id}&gl=US",
     ]
 
-    for url in urls_to_try:
+    for attempt, url in enumerate(urls_to_try):
         try:
-            r = requests.get(url, headers=YT_HEADERS, timeout=20)
-            r.raise_for_status()
+            headers = _make_headers(attempt)
+            r = requests.get(url, headers=headers, timeout=20)
+
+            # YouTube sometimes returns 200 with an HTML error page
+            if r.status_code != 200:
+                print(f"[YouTube] HTTP {r.status_code} for {channel_id} attempt {attempt+1}")
+                continue
 
             # Check we actually got XML not a block/redirect page
             if "<feed" not in r.text and "<rss" not in r.text:
-                print(f"[YouTube] Got non-XML response from {url} — may be blocked")
+                print(f"[YouTube] Got non-XML response for {channel_id} attempt {attempt+1} — blocked")
                 continue
 
             root = ET.fromstring(r.text)
@@ -104,14 +126,15 @@ def _fetch_feed(channel_id: str) -> list[dict]:
                     })
 
             if videos:
+                print(f"[YouTube] Got {len(videos)} videos for {channel_id} on attempt {attempt+1}")
                 return videos
 
         except ET.ParseError as e:
             print(f"[YouTube] XML parse error for {channel_id}: {e}")
         except Exception as e:
-            print(f"[YouTube] Fetch error for {channel_id}: {e}")
+            print(f"[YouTube] Fetch error for {channel_id} attempt {attempt+1}: {e}")
 
-    print(f"[YouTube] All attempts failed for channel {channel_id}")
+    print(f"[YouTube] All {len(urls_to_try)} attempts failed for channel {channel_id}")
     return []
 
 
