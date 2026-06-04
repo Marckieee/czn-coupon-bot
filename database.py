@@ -158,3 +158,115 @@ def get_all_monitor_states() -> list[dict]:
 
 def _now() -> str:
     return datetime.now(timezone.utc).strftime("%d %b %Y %H:%M UTC")
+
+
+# ---------------------------
+# CODE TRACKING
+# ---------------------------
+
+def save_detected_codes(game_key: str, codes: list[dict]) -> list[dict]:
+    """
+    Save newly detected codes to the database.
+    Returns only the codes that are genuinely new (not seen before).
+    """
+    with _connect() as conn:
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS detected_codes (
+                code        TEXT NOT NULL,
+                game_key    TEXT NOT NULL,
+                reward      TEXT,
+                expiry      TEXT,
+                detected_at TEXT NOT NULL,
+                PRIMARY KEY (code, game_key)
+            )
+        """)
+        conn.commit()
+
+        new_codes = []
+        for entry in codes:
+            existing = conn.execute(
+                "SELECT code FROM detected_codes WHERE code = ? AND game_key = ?",
+                (entry["code"], game_key)
+            ).fetchone()
+
+            if not existing:
+                conn.execute(
+                    "INSERT INTO detected_codes (code, game_key, reward, expiry, detected_at) VALUES (?, ?, ?, ?, ?)",
+                    (entry["code"], game_key, entry.get("reward", ""), entry.get("expiry"), _now())
+                )
+                new_codes.append(entry)
+
+        conn.commit()
+        return new_codes
+
+
+def get_recent_codes(game_key: str, hours: int = 24) -> list[dict]:
+    """
+    Return codes detected within the last X hours for a game.
+    """
+    with _connect() as conn:
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS detected_codes (
+                code        TEXT NOT NULL,
+                game_key    TEXT NOT NULL,
+                reward      TEXT,
+                expiry      TEXT,
+                detected_at TEXT NOT NULL,
+                PRIMARY KEY (code, game_key)
+            )
+        """)
+        conn.commit()
+
+        rows = conn.execute(
+            """
+            SELECT code, reward, expiry, detected_at
+            FROM detected_codes
+            WHERE game_key = ?
+            ORDER BY detected_at DESC
+            """,
+            (game_key,)
+        ).fetchall()
+
+        # Filter by age in Python (simpler than SQLite datetime math)
+        from datetime import datetime, timezone, timedelta
+        cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
+        recent = []
+
+        for row in rows:
+            try:
+                detected = datetime.strptime(row[3], "%d %b %Y %H:%M UTC").replace(tzinfo=timezone.utc)
+                if detected >= cutoff:
+                    recent.append({
+                        "code":         row[0],
+                        "reward":       row[1],
+                        "expiry":       row[2],
+                        "detected_at":  row[3],
+                    })
+            except Exception:
+                continue
+
+        return recent
+
+
+def clear_old_codes(days: int = 7) -> None:
+    """Remove codes older than X days to keep the database clean."""
+    with _connect() as conn:
+        rows = conn.execute(
+            "SELECT code, game_key, detected_at FROM detected_codes"
+        ).fetchall()
+
+        from datetime import datetime, timezone, timedelta
+        cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+
+        for row in rows:
+            try:
+                detected = datetime.strptime(row[2], "%d %b %Y %H:%M UTC").replace(tzinfo=timezone.utc)
+                if detected < cutoff:
+                    conn.execute(
+                        "DELETE FROM detected_codes WHERE code = ? AND game_key = ?",
+                        (row[0], row[1])
+                    )
+            except Exception:
+                continue
+
+        conn.commit()

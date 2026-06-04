@@ -204,33 +204,31 @@ def handle_codes(game_key: str) -> str:
     if not game:
         return "\u2753 Unknown game."
 
-    codes = scrapers.get_codes(game_key)
-    if not codes:
+    # Only show codes detected in the last 24 hours
+    recent_codes = database.get_recent_codes(game_key, hours=24)
+
+    if not recent_codes:
         return (
-            f"\U0001f614 No active codes for {game['name']} right now.\n\n"
-            f"Codes are released during events and updates \u2014 "
-            f"use /subscribe to get alerted the moment new codes drop!\n\n"
+            f"\U0001f614 No new codes detected for {game['name']} in the last 24 hours.\n\n"
+            f"Codes drop during events and updates \u2014 "
+            f"use /subscribe to get an instant alert when new ones appear!\n\n"
             f"\U0001f517 Check manually: {game['codes_url']}"
         )
 
-    checked_at = codes[0].get("checked_at", "unknown")
     lines = [
-        f"\U0001f381 {game['name']} Codes\n",
-        f"Found {len(codes)} active code(s):\n",
+        f"\U0001f381 {game['name']} \u2014 Recent Codes (last 24hrs)\n",
+        f"Found {len(recent_codes)} new code(s):\n",
     ]
 
-    for entry in codes[:15]:
+    for entry in recent_codes:
         lines.append(f"\u2022 {entry['code']}")
         lines.append(f"  \u21b3 {entry['reward']}")
         if entry.get("expiry"):
             lines.append(f"  \u23f0 Expires: {entry['expiry']}")
+        lines.append(f"  \U0001f550 Detected: {entry['detected_at']}")
         lines.append("")
 
     lines.append(f"\U0001f517 Redeem here: {game['redeem_url']}")
-    lines.append(f"\n\U0001f550 Last checked: {checked_at}")
-
-    if len(codes) > 15:
-        lines.append(f"\n+{len(codes) - 15} more \u2192 {game['codes_url']}")
 
     return "\n".join(lines)
 
