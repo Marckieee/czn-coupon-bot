@@ -547,11 +547,9 @@ else:
 youtube_monitor.preload_seen_videos()
 
 sub_count = database.get_subscriber_count()
-telegram_client.send_admin(
-    f"\U0001f916 Game Monitor Bot started!\n\n"
-    f"\U0001f465 Current subscribers: {sub_count}\n\n"
-    f"Send /help to see commands."
-)
+# Startup message removed to avoid spam on Railway restarts
+# Use /status to check if the bot is running
+print(f"[Bot] Ready! Subscribers: {sub_count}")
 
 # ---------------------------
 # MAIN LOOP
