@@ -581,19 +581,21 @@ def answer_callback(callback_query_id: str) -> None:
 
 # ---------------------------
 # CHECK SCHEDULE
-# All checks run every 60 minutes consistently
+# Bot polls Telegram every 5 seconds for fast response
+# Background monitors run every 1 hour
+# 5s x 720 loops = 3600s = 1 hour
 # ---------------------------
 
-CHECK_INTERVAL_SECONDS = 60   # sleep 60s per loop
-CHECK_INTERVAL_LOOPS   = 60   # 60 loops x 60s = 1 hour
+POLL_INTERVAL_SECONDS  = 5    # how often to check Telegram messages
+MONITOR_INTERVAL_LOOPS = 720  # 720 x 5s = 1 hour
 
 
 def _get_sleep_interval() -> int:
-    return CHECK_INTERVAL_SECONDS
+    return POLL_INTERVAL_SECONDS
 
 
 def _get_check_interval() -> int:
-    return CHECK_INTERVAL_LOOPS
+    return MONITOR_INTERVAL_LOOPS
 
 
 # ---------------------------
