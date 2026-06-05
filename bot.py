@@ -237,6 +237,51 @@ def handle_codes(game_key: str) -> str:
     return "\n".join(lines)
 
 
+def _format_date(raw: str) -> str:
+    """
+    Normalise various date formats into "Wednesday, 04 Jun 2026".
+    Handles:
+      - "June 3, 2026"     -> "Wednesday, 03 Jun 2026"
+      - "April 29"         -> "Tuesday, 29 Apr"
+      - "6/4"              -> "Thursday, 04 Jun 2026"
+      - "6/4 (Thu)"        -> "Thursday, 04 Jun 2026"
+    """
+    from datetime import datetime
+    import re
+
+    raw = raw.strip()
+    if not raw:
+        return ""
+
+    # Try full formats first
+    for fmt in ("%B %d, %Y", "%B %d %Y", "%b %d, %Y", "%b %d %Y"):
+        try:
+            dt = datetime.strptime(raw, fmt)
+            return dt.strftime("%A, %d %b %Y")
+        except ValueError:
+            pass
+
+    # Month Day without year e.g. "April 29" or "Apr 29"
+    for fmt in ("%B %d", "%b %d"):
+        try:
+            dt = datetime.strptime(raw, fmt)
+            return dt.strftime("%A, %d %b")
+        except ValueError:
+            pass
+
+    # MM/DD or MM/DD (Day) e.g. "6/4" or "6/4 (Thu)"
+    m = re.match(r"^(\d{1,2})/(\d{1,2})", raw)
+    if m:
+        month, day = int(m.group(1)), int(m.group(2))
+        try:
+            year = datetime.now().year
+            return datetime(year, month, day).strftime("%A, %d %b %Y")
+        except ValueError:
+            pass
+
+    return raw  # Return as-is if nothing matched
+
+
 def _fetch_patch_posts(game_key: str) -> list[tuple[str, str, str]]:
     """
     Shared helper — scrapes patch post titles, links and dates.
@@ -287,7 +332,12 @@ def _fetch_patch_posts(game_key: str) -> list[tuple[str, str, str]]:
 
             # Extract date from parentheses e.g. "(April 8, 2026)"
             date_match = re.search(r"\(([A-Za-z]+ \d{1,2},?\s*\d{4})\)", full_text)
-            date = date_match.group(1) if date_match else ""
+            raw_date = date_match.group(1) if date_match else ""
+            # Also try extracting date from title itself e.g. "April 29 Patch Note..."
+            if not raw_date:
+                title_date = re.match(r"^([A-Za-z]+ \d{1,2})", title)
+                raw_date = title_date.group(1) if title_date else ""
+            date = _format_date(raw_date)
 
             if title and len(title) > 5:
                 seen.add(href)
@@ -314,7 +364,10 @@ def _fetch_patch_posts(game_key: str) -> list[tuple[str, str, str]]:
                 title = lines[0]
 
                 # Second line = date  e.g. "June 3, 2026"
-                date = lines[1] if len(lines) > 1 else ""
+                raw_date = lines[1] if len(lines) > 1 else ""
+
+                # Clean and format the date
+                date = _format_date(raw_date)
 
                 # Skip navigation links like "Back", "Next", page numbers
                 if title.lower() in ("back", "next") or title.isdigit():
@@ -527,6 +580,81 @@ def answer_callback(callback_query_id: str) -> None:
 
 
 # ---------------------------
+# SMART PATCH SCHEDULE
+# All times in SGT (UTC+8)
+#
+# Epic Seven  — Wednesday 5:30pm–9:00pm SGT → check every 2 minutes
+# CZN         — Wednesday midnight–11:00am SGT → check every 2 minutes
+# Both        — Rest of week → check every 30 minutes
+# ---------------------------
+
+from datetime import timezone, timedelta
+
+SGT = timezone(timedelta(hours=8))
+
+
+def _now_sgt():
+    """Return current datetime in Singapore Time (SGT = UTC+8)."""
+    return datetime.now(SGT)
+
+
+def _get_sleep_interval() -> int:
+    """
+    Return the base sleep interval in seconds.
+    2 minutes during aggressive windows, 30 seconds otherwise
+    (loop count multiplier handles the actual check frequency).
+    """
+    now   = _now_sgt()
+    day   = now.weekday()   # 0=Mon, 1=Tue, 2=Wed, 3=Thu ...
+    hour  = now.hour
+    minute = now.minute
+
+    is_wednesday = (day == 2)
+
+    # Epic Seven aggressive window: Wed 17:30–21:00 SGT
+    epic7_aggressive = is_wednesday and (
+        (hour == 17 and minute >= 30) or
+        (hour in (18, 19, 20)) or
+        (hour == 21 and minute == 0)
+    )
+
+    # CZN aggressive window: Wed 00:00–11:00 SGT
+    czn_aggressive = is_wednesday and (0 <= hour < 11)
+
+    if epic7_aggressive or czn_aggressive:
+        return 5   # 5 second base sleep → aggressive checks
+
+    return 30      # 30 second base sleep → relaxed checks
+
+
+def _get_check_interval() -> int:
+    """
+    Return how many loops before running a background check.
+    Combined with _get_sleep_interval():
+      - Aggressive: 5s x 24 loops = 2 minutes
+      - Relaxed:   30s x 60 loops = 30 minutes
+    """
+    now   = _now_sgt()
+    day   = now.weekday()
+    hour  = now.hour
+    minute = now.minute
+
+    is_wednesday = (day == 2)
+
+    epic7_aggressive = is_wednesday and (
+        (hour == 17 and minute >= 30) or
+        (hour in (18, 19, 20)) or
+        (hour == 21 and minute == 0)
+    )
+    czn_aggressive = is_wednesday and (0 <= hour < 11)
+
+    if epic7_aggressive or czn_aggressive:
+        return 24   # 24 x 5s = 2 minutes
+
+    return 60       # 60 x 30s = 30 minutes
+
+
+# ---------------------------
 # STARTUP
 # ---------------------------
 print("=" * 40)
@@ -607,16 +735,17 @@ while True:
 
     loop_count += 1
 
-    # Background checks every 15 minutes (180 x 5s loops)
-    if loop_count % 180 == 0:
-        print("[Monitor] Checking codes pages...")
+    # Background checks — interval adapts to patch schedule
+    sleep_secs = _get_sleep_interval()
+    interval   = _get_check_interval()
+
+    if loop_count % interval == 0:
+        now_sgt = _now_sgt()
+        print(f"[Monitor] Running checks (SGT: {now_sgt.strftime('%a %H:%M')}, every {interval * sleep_secs // 60}min)...")
         monitor.check_pages()
-        print("[Monitor] Checking Epic Seven patch notes...")
         monitor.check_epic7_patches()
-        print("[Monitor] Checking CZN patch notes...")
         monitor.check_czn_patches()
-        print("[Monitor] Checking YouTube channels...")
         youtube_monitor.check_youtube()
         loop_count = 0
 
-    time.sleep(5)
+    time.sleep(sleep_secs)
