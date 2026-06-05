@@ -270,3 +270,69 @@ def clear_old_codes(days: int = 7) -> None:
                 continue
 
         conn.commit()
+
+
+# ---------------------------
+# SEEN ITEMS TRACKING
+# Persists across restarts so we don't re-alert old content
+# ---------------------------
+
+def init_seen_items() -> None:
+    """Create seen_items table if it doesn't exist."""
+    with _connect() as conn:
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS seen_items (
+                key         TEXT PRIMARY KEY,
+                value       TEXT NOT NULL,
+                updated_at  TEXT NOT NULL
+            )
+        """)
+        conn.commit()
+
+
+def get_seen_set(key: str) -> set[str]:
+    """Return a set of seen IDs stored under a key."""
+    with _connect() as conn:
+        row = conn.execute(
+            "SELECT value FROM seen_items WHERE key = ?", (key,)
+        ).fetchone()
+        if row:
+            import json
+            return set(json.loads(row[0]))
+        return set()
+
+
+def save_seen_set(key: str, items: set[str]) -> None:
+    """Save a set of seen IDs under a key."""
+    import json
+    with _connect() as conn:
+        conn.execute("""
+            INSERT INTO seen_items (key, value, updated_at)
+            VALUES (?, ?, ?)
+            ON CONFLICT(key) DO UPDATE SET
+                value      = excluded.value,
+                updated_at = excluded.updated_at
+        """, (key, json.dumps(list(items)), _now()))
+        conn.commit()
+
+
+def get_page_hash(key: str) -> str | None:
+    """Return stored page hash for a URL key."""
+    with _connect() as conn:
+        row = conn.execute(
+            "SELECT value FROM seen_items WHERE key = ?", (f"hash_{key}",)
+        ).fetchone()
+        return row[0] if row else None
+
+
+def save_page_hash(key: str, hash_value: str) -> None:
+    """Store a page hash."""
+    with _connect() as conn:
+        conn.execute("""
+            INSERT INTO seen_items (key, value, updated_at)
+            VALUES (?, ?, ?)
+            ON CONFLICT(key) DO UPDATE SET
+                value      = excluded.value,
+                updated_at = excluded.updated_at
+        """, (f"hash_{key}", hash_value, _now()))
+        conn.commit()

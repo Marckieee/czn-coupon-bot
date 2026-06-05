@@ -36,8 +36,20 @@ YOUTUBE_CHANNELS = {
     },
 }
 
-# Tracks video IDs already alerted on
+# In-memory cache of seen video IDs (backed by database for persistence)
 _seen_video_ids: set[str] = set()
+
+
+def _load_seen_videos() -> None:
+    """Load seen video IDs from database into memory."""
+    global _seen_video_ids
+    _seen_video_ids = database.get_seen_set("youtube_seen_videos")
+    print(f"[YouTube] Loaded {len(_seen_video_ids)} seen video IDs from database.")
+
+
+def _save_seen_videos() -> None:
+    """Persist seen video IDs to database."""
+    database.save_seen_set("youtube_seen_videos", _seen_video_ids)
 
 # Cache uploads playlist IDs so we don't re-fetch them every time
 _uploads_playlist_cache: dict[str, str] = {}
@@ -167,7 +179,20 @@ def _fetch_latest_videos(channel_id: str, max_results: int = 5) -> list[dict]:
 
 
 def preload_seen_videos() -> None:
-    """Pre-load existing videos on startup to avoid re-alerting."""
+    """
+    On startup, load seen video IDs from database first.
+    Only fetch from YouTube API if database is empty (first run).
+    """
+    global _seen_video_ids
+
+    # Load from database first — survives restarts
+    _load_seen_videos()
+
+    if _seen_video_ids:
+        print(f"[YouTube] Using {len(_seen_video_ids)} seen IDs from database — skipping API preload.")
+        return
+
+    # First run — fetch from API and save to database
     api_key = _get_api_key()
     if not api_key:
         print("[YouTube] Skipping preload — no API key.")
@@ -180,7 +205,9 @@ def preload_seen_videos() -> None:
             _seen_video_ids.add(v["id"])
         total += len(videos)
         print(f"[YouTube] Pre-loaded {len(videos)} videos for {channel['name']}")
-    print(f"[YouTube] Total pre-loaded: {total} video IDs.")
+
+    _save_seen_videos()
+    print(f"[YouTube] Saved {total} video IDs to database.")
 
 
 def check_youtube() -> None:
@@ -206,6 +233,7 @@ def check_youtube() -> None:
                 continue
 
             _seen_video_ids.add(video["id"])
+            _save_seen_videos()  # persist immediately so restarts don't re-alert
             print(f"[YouTube] New video from {channel['name']}: {video['title']}")
 
             date_str = f"\n\U0001f4c5 {video['published']}" if video["published"] else ""

@@ -535,6 +535,7 @@ print("=" * 40)
 
 config.validate()
 database.init_db()
+database.init_seen_items()
 
 print("[Bot] Flushing pending Telegram updates...")
 _pending = telegram_client.get_updates(offset=-1)

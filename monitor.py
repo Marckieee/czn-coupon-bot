@@ -19,8 +19,21 @@ import scrapers
 import telegram_client
 import database
 
-# Tracks MD5 hashes of pages to detect updates
+# In-memory cache of page hashes (backed by database for persistence)
 _page_hashes: dict[str, str] = {}
+
+
+def _get_hash(key: str) -> str | None:
+    """Get page hash from DB cache, falling back to in-memory."""
+    if key in _page_hashes:
+        return _page_hashes[key]
+    return database.get_page_hash(key)
+
+
+def _set_hash(key: str, value: str) -> None:
+    """Save page hash to both memory and database."""
+    _page_hashes[key] = value
+    database.save_page_hash(key, value)
 
 # Consecutive failure counts per URL
 _fail_counts: dict[str, int] = {}
@@ -120,7 +133,7 @@ def check_pages() -> None:
                 _fail_counts[url] = 0
             continue
 
-        if url in _page_hashes and _page_hashes[url] != current_hash:
+        if _get_hash(url) and _get_hash(url) != current_hash:
             print(f"[Monitor] {game['name']} page changed - checking for new codes...")
 
             # Scrape current codes
@@ -142,7 +155,7 @@ def check_pages() -> None:
                 else:
                     print(f"[Monitor] Page changed but no new codes detected for {game['name']}")
 
-        _page_hashes[url] = current_hash
+        _set_hash(url, current_hash)
 
         database.update_monitor_state(
             key        = f"{game_key}_codes",
@@ -206,7 +219,7 @@ def _check_patches(game_key: str) -> None:
     current_hash = hashlib.md5(r.text.encode()).hexdigest()
     patch_key_db = f"{game_key}_patches"
 
-    if patch_key_db in _page_hashes and _page_hashes[patch_key_db] != current_hash:
+    if _get_hash(patch_key_db) and _get_hash(patch_key_db) != current_hash:
         if posts:
             title, url, date = posts[0]
             date_str = f"\n\U0001f4c5 {date}" if date else ""
@@ -223,7 +236,7 @@ def _check_patches(game_key: str) -> None:
             else:
                 telegram_client.send_admin(alert)
 
-    _page_hashes[patch_key_db] = current_hash
+    _set_hash(patch_key_db, current_hash)
 
     database.update_monitor_state(
         key        = patch_key_db,
