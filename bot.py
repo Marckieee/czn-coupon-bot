@@ -580,78 +580,20 @@ def answer_callback(callback_query_id: str) -> None:
 
 
 # ---------------------------
-# SMART PATCH SCHEDULE
-# All times in SGT (UTC+8)
-#
-# Epic Seven  — Wednesday 5:30pm–9:00pm SGT → check every 2 minutes
-# CZN         — Wednesday midnight–11:00am SGT → check every 2 minutes
-# Both        — Rest of week → check every 30 minutes
+# CHECK SCHEDULE
+# All checks run every 60 minutes consistently
 # ---------------------------
 
-from datetime import timezone, timedelta
-
-SGT = timezone(timedelta(hours=8))
-
-
-def _now_sgt():
-    """Return current datetime in Singapore Time (SGT = UTC+8)."""
-    return datetime.now(SGT)
+CHECK_INTERVAL_SECONDS = 60   # sleep 60s per loop
+CHECK_INTERVAL_LOOPS   = 60   # 60 loops x 60s = 1 hour
 
 
 def _get_sleep_interval() -> int:
-    """
-    Return the base sleep interval in seconds.
-    2 minutes during aggressive windows, 30 seconds otherwise
-    (loop count multiplier handles the actual check frequency).
-    """
-    now   = _now_sgt()
-    day   = now.weekday()   # 0=Mon, 1=Tue, 2=Wed, 3=Thu ...
-    hour  = now.hour
-    minute = now.minute
-
-    is_wednesday = (day == 2)
-
-    # Epic Seven aggressive window: Wed 17:30–21:00 SGT
-    epic7_aggressive = is_wednesday and (
-        (hour == 17 and minute >= 30) or
-        (hour in (18, 19, 20)) or
-        (hour == 21 and minute == 0)
-    )
-
-    # CZN aggressive window: Wed 00:00–11:00 SGT
-    czn_aggressive = is_wednesday and (0 <= hour < 11)
-
-    if epic7_aggressive or czn_aggressive:
-        return 5   # 5 second base sleep → aggressive checks
-
-    return 30      # 30 second base sleep → relaxed checks
+    return CHECK_INTERVAL_SECONDS
 
 
 def _get_check_interval() -> int:
-    """
-    Return how many loops before running a background check.
-    Combined with _get_sleep_interval():
-      - Aggressive: 5s x 24 loops = 2 minutes
-      - Relaxed:   30s x 60 loops = 30 minutes
-    """
-    now   = _now_sgt()
-    day   = now.weekday()
-    hour  = now.hour
-    minute = now.minute
-
-    is_wednesday = (day == 2)
-
-    epic7_aggressive = is_wednesday and (
-        (hour == 17 and minute >= 30) or
-        (hour in (18, 19, 20)) or
-        (hour == 21 and minute == 0)
-    )
-    czn_aggressive = is_wednesday and (0 <= hour < 11)
-
-    if epic7_aggressive or czn_aggressive:
-        return 24   # 24 x 5s = 2 minutes
-
-    return 60       # 60 x 30s = 30 minutes
+    return CHECK_INTERVAL_LOOPS
 
 
 # ---------------------------
@@ -740,8 +682,7 @@ while True:
     interval   = _get_check_interval()
 
     if loop_count % interval == 0:
-        now_sgt = _now_sgt()
-        print(f"[Monitor] Running checks (SGT: {now_sgt.strftime('%a %H:%M')}, every {interval * sleep_secs // 60}min)...")
+        print("[Monitor] Running hourly checks...")
         monitor.check_pages()
         monitor.check_epic7_patches()
         monitor.check_czn_patches()
