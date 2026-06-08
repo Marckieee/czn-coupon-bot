@@ -133,7 +133,12 @@ def check_pages() -> None:
                 _fail_counts[url] = 0
             continue
 
-        if _get_hash(url) and _get_hash(url) != current_hash:
+        stored_url_hash = _get_hash(url)
+        if stored_url_hash is None:
+            print(f"[Monitor] First check for {game['name']} codes — saving hash silently.")
+            _set_hash(url, current_hash)
+            continue
+        if stored_url_hash != current_hash:
             print(f"[Monitor] {game['name']} page changed - checking for new codes...")
 
             # Scrape current codes
@@ -217,9 +222,15 @@ def _check_patches(game_key: str) -> None:
                 posts.append((title, href, date))
 
     current_hash = hashlib.md5(r.text.encode()).hexdigest()
-    patch_key_db = f"{game_key}_patches"
+    patch_key_db  = f"{game_key}_patches"
+    stored_hash   = _get_hash(patch_key_db)
 
-    if _get_hash(patch_key_db) and _get_hash(patch_key_db) != current_hash:
+    if stored_hash is None:
+        # First run after restart — save hash silently, no alert
+        print(f"[Monitor] First check for {name} patches — saving hash, no alert.")
+        _set_hash(patch_key_db, current_hash)
+    elif stored_hash != current_hash:
+        # Genuine change detected — alert subscribers
         if posts:
             title, url, date = posts[0]
             date_str = f"\n\U0001f4c5 {date}" if date else ""
@@ -235,8 +246,9 @@ def _check_patches(game_key: str) -> None:
                 print(f"[Monitor] Patch alert sent to {ok} subscribers ({fail} failed)")
             else:
                 telegram_client.send_admin(alert)
-
-    _set_hash(patch_key_db, current_hash)
+        _set_hash(patch_key_db, current_hash)
+    else:
+        print(f"[Monitor] No change detected for {name} patches.")
 
     database.update_monitor_state(
         key        = patch_key_db,
